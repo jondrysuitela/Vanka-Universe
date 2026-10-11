@@ -1,0 +1,82 @@
+import type { SessionAdmin } from "@/lib/auth/session";
+
+/**
+ * Media storage abstraction (Tahap 4G.40C).
+ *
+ * Defines the provider-agnostic contract the media API consumes. The concrete
+ * provider is selected in `storage/index.ts` from `MEDIA_STORAGE_DRIVER`
+ * (default `filesystem`). Behavior, paths, limits, and return semantics are
+ * identical to the pre-extraction filesystem implementation.
+ *
+ * Types only + pure constants: this module performs no I/O and imports no
+ * runtime provider code, so it is safe to import anywhere the media types are
+ * needed.
+ */
+
+export type MediaKind = "image" | "video";
+
+export interface MediaRecord {
+  id: string;
+  name: string;
+  mime: string;
+  kind: MediaKind;
+  size: number;
+  ownerId: string;
+  ownerLabel: string;
+  /** Upload timestamp (server-set, never client-writable). */
+  createdAt: string;
+  /** Human-editable metadata (null until edited). */
+  title: string | null;
+  description: string | null;
+  /** Capture date (YYYY-MM-DD), distinct from the upload date. */
+  takenAt: string | null;
+}
+
+/** Human-editable metadata patch. A `null` value clears the field. */
+export interface MediaMetadataPatch {
+  title?: string | null;
+  description?: string | null;
+  takenAt?: string | null;
+}
+
+/** Result of reading an object: its metadata plus the bytes. */
+export interface MediaReadResult {
+  record: MediaRecord;
+  data: Buffer;
+}
+
+/**
+ * The provider contract. Implementations must preserve the existing semantics:
+ * missing objects/indexes return `null` or throw a typed error — never a silent
+ * "empty" that hides data; validation and size limits stay authoritative.
+ */
+export interface MediaStore {
+  list(): Promise<MediaRecord[]>;
+  save(admin: SessionAdmin, file: File): Promise<MediaRecord>;
+  read(id: string): Promise<MediaReadResult | null>;
+  find(id: string): Promise<MediaRecord | null>;
+  updateMetadata(id: string, patch: MediaMetadataPatch): Promise<MediaRecord | null>;
+  remove(id: string): Promise<MediaRecord | null>;
+}
+
+/**
+ * Raised when `MEDIA_STORAGE_DRIVER` is unknown/unsupported. FAIL-CLOSED: the
+ * caller must never fall back to another provider silently.
+ */
+export class StorageConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StorageConfigError";
+  }
+}
+
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Upper bound for a whole multipart upload request: the largest allowed file
+ * (video) plus a small multipart framing allowance. Used only for an EARLY
+ * `Content-Length` rejection; the per-kind cap applied after magic-byte sniffing
+ * stays authoritative.
+ */
+export const MAX_REQUEST_BYTES = MAX_VIDEO_BYTES + 1024 * 1024;

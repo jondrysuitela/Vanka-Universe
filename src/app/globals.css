@@ -1,0 +1,199 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --font-inter: Inter;
+  --font-playfair: Playfair_Display;
+  --font-cinzel: Cinzel;
+  --font-dancing: Dancing_Script;
+
+  /* Vanka Universe — cosmos palette */
+  --cosmos-void: #04060f;
+  --cosmos-deep: #070d1f;
+  --cosmos-mid: #0c1735;
+  --starlight: #e9eeff;
+  --gold-soft: #f6e3b2;
+  --gold: #e9c67c;
+  --gold-deep: #c99b53;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-serif: var(--font-playfair);
+  --font-display: var(--font-cinzel);
+  --font-script: var(--font-dancing);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+@layer utilities {
+  .text-shadow {
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  }
+  
+  .text-shadow-lg {
+    text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.5);
+  }
+  
+  .backdrop-blur-glass {
+    backdrop-filter: blur(10px) saturate(180%);
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  
+  .gradient-aurora {
+    background: radial-gradient(
+        circle at 20% 30%,
+        rgba(120, 119, 198, 0.3) 0%,
+        transparent 50%
+      ),
+      radial-gradient(circle at 80% 10%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
+      radial-gradient(circle at 80% 90%, rgba(120, 200, 255, 0.3) 0%, transparent 50%),
+      radial-gradient(circle at 20% 90%, rgba(120, 255, 198, 0.3) 0%, transparent 50%);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Vanka Universe — cosmic landing theme
+   --------------------------------------------------------------------------- */
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Applied to <body> so the night sky continues past the page edges. */
+.cosmos-body {
+  background-color: var(--cosmos-void);
+  color: var(--starlight);
+  color-scheme: dark;
+}
+
+.cosmos-sky {
+  background: radial-gradient(
+    ellipse 120% 85% at 50% -15%,
+    #14264f 0%,
+    #0a1433 38%,
+    #070d1f 68%,
+    #04060f 100%
+  );
+}
+
+.cosmos-aurora-a,
+.cosmos-aurora-b,
+.cosmos-aurora-c {
+  position: absolute;
+  border-radius: 9999px;
+}
+
+.cosmos-aurora-a {
+  background: radial-gradient(circle at center, rgba(99, 102, 241, 0.4) 0%, transparent 68%);
+  filter: blur(70px);
+}
+
+.cosmos-aurora-b {
+  background: radial-gradient(circle at center, rgba(56, 189, 248, 0.3) 0%, transparent 68%);
+  filter: blur(85px);
+}
+
+.cosmos-aurora-c {
+  background: radial-gradient(circle at center, rgba(233, 198, 124, 0.26) 0%, transparent 70%);
+  filter: blur(95px);
+}
+
+.cosmos-vignette {
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(2, 4, 10, 0.78) 100%);
+}
+
+.cosmos-divider {
+  background: linear-gradient(to right, transparent, rgba(233, 198, 124, 0.65), transparent);
+}
+
+.gold-glow {
+  filter: drop-shadow(0 0 22px rgba(233, 198, 124, 0.35));
+}
+
+@keyframes star-twinkle {
+  0%,
+  100% {
+    opacity: calc(var(--star-base, 0.7) * 0.25);
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: var(--star-base, 0.9);
+    transform: scale(1);
+  }
+}
+
+@keyframes gold-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.9;
+  }
+  85% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(var(--drift, 18px), -140px, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes aurora-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translate3d(3%, -4%, 0) scale(1.08);
+  }
+}
+
+.star-twinkle {
+  animation-name: star-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.gold-drift {
+  animation-name: gold-drift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.aurora-breathe {
+  animation-name: aurora-breathe;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .star-twinkle,
+  .gold-drift,
+  .aurora-breathe {
+    animation: none !important;
+  }
+}
