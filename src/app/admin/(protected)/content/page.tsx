@@ -113,7 +113,7 @@ export default function AdminContentPage() {
       const updated = body.data;
       setItems((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
       setEditing(null);
-      showToast({ title: "Metadata disimpan", message: "Perubahan tersimpan di penyimpanan lokal server.", type: "success" });
+      showToast({ title: "Metadata disimpan", message: "Perubahan tersimpan di penyimpanan aman (R2).", type: "success" });
     } catch {
       setEditError("Tidak dapat menghubungi server.");
     } finally {
@@ -142,7 +142,7 @@ export default function AdminContentPage() {
         return;
       }
       setItems((prev) => prev.filter((m) => m.id !== deleting.id));
-      showToast({ title: "Media dihapus", message: "File dan metadatanya dihapus dari penyimpanan lokal server.", type: "info" });
+      showToast({ title: "Media dihapus", message: "File dan metadatanya dihapus dari penyimpanan aman (R2).", type: "info" });
       setDeleting(null);
     } catch {
       setDeleteError("Tidak dapat menghubungi server.");
@@ -311,7 +311,7 @@ export default function AdminContentPage() {
         title="Hapus Media"
         description={
           deleting
-            ? `Hapus "${deleting.title?.trim() ? deleting.title : deleting.name}"? File dan metadatanya dihapus dari penyimpanan lokal server. Tindakan ini tidak dapat dibatalkan.`
+            ? `Hapus "${deleting.title?.trim() ? deleting.title : deleting.name}"? File dan metadatanya dihapus dari penyimpanan aman (R2). Tindakan ini tidak dapat dibatalkan.`
             : ""
         }
         confirmLabel={removing ? "Menghapus…" : "Hapus"}

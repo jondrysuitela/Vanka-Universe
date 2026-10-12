@@ -50,7 +50,7 @@ export default function AdminSettingsPage() {
       <div>
         <h1 className="text-3xl font-display tracking-widest text-[#fdf3d8]">Pengaturan</h1>
         <p className="text-sm text-[#fdf3d8]/70 mt-2">
-          Keamanan akun berlaku nyata. Preferensi tampilan di bawah masih demo lokal.
+          Keamanan akun berlaku nyata. Preferensi tampilan di bawah hanya berlaku untuk sesi ini.
         </p>
       </div>
 
@@ -87,15 +87,15 @@ export default function AdminSettingsPage() {
         )}
       </section>
 
-      {/* --------------------------------------------------- display (demo) */}
+      {/* ---------------------------------------------- display (session only) */}
       <section className="rounded-2xl border border-white/10 bg-[#0b1226]/70 backdrop-blur-xl p-6 space-y-6">
         <div>
-          <h2 className="text-lg font-display text-[#fdf3d8] mb-4">Preferensi Tampilan (Demo Lokal)</h2>
+          <h2 className="text-lg font-display text-[#fdf3d8] mb-4">Preferensi Tampilan (Sesi Ini)</h2>
           <div className="space-y-4">
             <label className="flex items-center justify-between py-3 border-b border-white/5">
               <div>
                 <p className="text-sm text-[#fdf3d8]">Kurangi Animasi</p>
-                <p className="text-xs text-[#fdf3d8]/60 mt-1">Menerapkan preferensi reduce motion pada panel admin (demo)</p>
+                <p className="text-xs text-[#fdf3d8]/60 mt-1">Menerapkan preferensi reduce motion pada panel admin (sesi ini)</p>
               </div>
               <input
                 type="checkbox"
@@ -107,7 +107,7 @@ export default function AdminSettingsPage() {
             <label className="flex items-center justify-between py-3 border-b border-white/5">
               <div>
                 <p className="text-sm text-[#fdf3d8]">Mode Kompak</p>
-                <p className="text-xs text-[#fdf3d8]/60 mt-1">Menyesuaikan jarak antar elemen (demo)</p>
+                <p className="text-xs text-[#fdf3d8]/60 mt-1">Menyesuaikan jarak antar elemen (sesi ini)</p>
               </div>
               <input
                 type="checkbox"
@@ -124,7 +124,7 @@ export default function AdminSettingsPage() {
           <div className="space-y-3 text-sm text-[#fdf3d8]/80">
             <div className="flex justify-between py-2 border-b border-white/5">
               <span className="text-[#fdf3d8]/70">Jenis Implementasi</span>
-              <span>Keamanan nyata · tampilan demo</span>
+              <span>Keamanan nyata · tampilan sesi ini</span>
             </div>
             <div className="flex justify-between py-2 border-b border-white/5">
               <span className="text-[#fdf3d8]/70">Autentikasi</span>
@@ -132,7 +132,7 @@ export default function AdminSettingsPage() {
             </div>
             <div className="flex justify-between py-2 border-b border-white/5">
               <span className="text-[#fdf3d8]/70">Preferensi Tampilan</span>
-              <span>Demo (tidak permanen)</span>
+              <span>Sesi ini (tidak permanen)</span>
             </div>
             <div className="flex justify-between py-2">
               <span className="text-[#fdf3d8]/70">Bahasa Antarmuka</span>
@@ -152,13 +152,13 @@ export default function AdminSettingsPage() {
 
       <ConfirmDialog
         open={openApply}
-        title="Terapkan Preferensi Tampilan (Demo)"
-        description="Preferensi tampilan ini hanya berlaku untuk sesi demo lokal ini. Tidak disimpan permanen."
+        title="Terapkan Preferensi Tampilan (Sesi Ini)"
+        description="Preferensi tampilan ini hanya berlaku untuk sesi ini. Tidak disimpan permanen."
         confirmLabel="Oke"
         cancelLabel="Tutup"
         onConfirm={() => {
           setOpenApply(false);
-          showToast({ title: "Demo", message: "Preferensi tampilan diterapkan untuk sesi ini (demo lokal).", type: "info" });
+          showToast({ title: "Info", message: "Preferensi tampilan diterapkan untuk sesi ini.", type: "info" });
         }}
         onCancel={() => setOpenApply(false)}
       />

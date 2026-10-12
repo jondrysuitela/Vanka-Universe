@@ -53,14 +53,14 @@ const admin: SessionAdmin = {
   role: "owner",
 };
 
-function pngBytes(extra = 64): Buffer {
+function pngBytes(extra = 64): Buffer<ArrayBuffer> {
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     Buffer.alloc(extra, 7),
   ]);
 }
 
-function mp4Bytes(): Buffer {
+function mp4Bytes(): Buffer<ArrayBuffer> {
   return Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftyp"), Buffer.alloc(16)]);
 }
 

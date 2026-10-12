@@ -6,12 +6,12 @@ import { getSessionAdmin, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 
 export const ADMIN_LOGIN_PATH = "/admin/login";
 
-// Cache Components is enabled (next.config.ts `cacheComponents: true`). This
-// layout performs a per-request auth check backed by an uncached database
-// query, and there is no meaningful static shell to prerender for `/admin/*`
-// (auth gating happens high in the tree). Opt this segment out of
-// instant-navigation validation so it renders per request as a blocking route.
-export const instant = false;
+// NOTE: `export const instant = false;` was REMOVED here on purpose. `instant`
+// is a Cache Components segment config and Cache Components is disabled in
+// next.config.ts (`cacheComponents: false`) to avoid the workerd staged-render
+// hang (cloudflare/workerd#7687, upstream fix in unreleased PR #1318). The
+// per-request behaviour is unchanged: this layout reads cookies and performs an
+// uncached session query, so it still renders on every request.
 
 /**
  * Server-side guard for every protected `/admin/*` page.
@@ -32,11 +32,11 @@ export const instant = false;
  * and is never shown to the client.
  */
 export default async function ProtectedAdminLayout({ children }: { children: React.ReactNode }) {
-  // Force request-time rendering BEFORE any database-backed work. Without this,
-  // Cache Components would attempt the session query during static prerendering
-  // and fail with "encountered uncached data during prerendering"
-  // (src/lib/auth/session.ts -> getPool().query()). `connection()` stalls the
-  // prerender so the uncached session lookup only ever runs on a real request.
+  // Force request-time rendering BEFORE any database-backed work. This keeps the
+  // uncached session query (src/lib/auth/session.ts -> getPool().query()) off any
+  // prerender path; without it the lookup could be attempted while the route is
+  // being statically prepared. `connection()` is valid with Cache Components off
+  // (as configured here) and has no effect on the auth result.
   await connection();
 
   const cookieStore = await cookies();

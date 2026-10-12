@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "vanka",
+  // Must be >= 2024-09-23 for the Node.js compatibility flag (nodejs_compat v2).
+  // 2026-08-01 is the adapter's own default compat date and keeps us inside the
+  // adapter's 6-month freshness window (avoids its "consider updating" warning).
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // Non-secret production configuration only. Secrets (DATABASE_URL, R2_*) are
+  // set with `wrangler secret put` and never appear here.
+  // NOTE: these vars also apply to `wrangler dev`; override them with
+  // `--env-file` / `.dev.vars` when testing locally without real services.
+  "vars": {
+    "NODE_ENV": "production",
+    "DB_DRIVER": "neon",
+    "MEDIA_STORAGE_DRIVER": "db-r2",
+    "ARCHIVE_TRUSTED_PROXY_HEADER": "cf-connecting-ip"
+  },
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // Self-reference binding used by the adapter for revalidation/preloading.
+  // It points at this same Worker; no external resource is created.
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "vanka"
+    }
+  ]
+}

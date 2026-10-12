@@ -71,7 +71,7 @@ describe("create-owner.mjs — validasi nama", () => {
 
 describe("create-owner.mjs — parseArgs (argv)", () => {
   /** Replikasi kecil dari pengambilan argv asli agar parseArgs bisa diuji. */
-  function withArgv(argv, fn) {
+  function withArgv<T>(argv: string[], fn: () => T): T {
     const original = process.argv;
     process.argv = ["node", "scripts/create-owner.mjs", ...argv];
     try {

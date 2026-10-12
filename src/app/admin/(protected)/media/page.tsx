@@ -164,7 +164,7 @@ export default function AdminMediaPage() {
       clearSelection();
       showToast({
         title: "Tersimpan",
-        message: "File tersimpan di penyimpanan lokal server.",
+        message: "File tersimpan di penyimpanan aman (R2).",
         type: "success",
       });
     } catch {
@@ -180,7 +180,7 @@ export default function AdminMediaPage() {
         <div>
           <h1 className="text-3xl font-display tracking-widest text-[#fdf3d8]">Pustaka Media</h1>
           <p className="text-sm text-[#fdf3d8]/70 mt-2">
-            *(Penyimpanan lokal server — privat, tidak di `public/`)*
+            *(Penyimpanan privat (Cloudflare R2) — berkas tidak pernah masuk `public/`)*
           </p>
         </div>
         <button
@@ -310,7 +310,7 @@ export default function AdminMediaPage() {
 
       <section className="space-y-4">
         <h2 className="text-xl font-display tracking-wider text-[#fdf3d8]">
-          Media Tersimpan (Server Lokal)
+          Media Tersimpan
         </h2>
         {listError ? (
           <p className="rounded-2xl border border-white/10 bg-[#0b1226]/70 px-6 py-4 text-sm text-[#fdf3d8]/70 backdrop-blur-xl">
@@ -352,7 +352,7 @@ export default function AdminMediaPage() {
                   <p className="text-xs text-[#fdf3d8]/60">
                     {item.kind === "image" ? "Gambar" : "Video"} · {formatBytes(item.size)}
                   </p>
-                  <p className="text-xs text-emerald-300/80">Tersimpan di server lokal</p>
+                  <p className="text-xs text-emerald-300/80">Tersimpan aman (R2)</p>
                 </div>
               </div>
             ))}

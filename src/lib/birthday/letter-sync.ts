@@ -239,7 +239,13 @@ export async function saveLetterEnsuringEdition(
   draft: LetterDraft,
 ): Promise<ServerSaveOutcome> {
   const first = await saveLetter(fetcher, age, draft);
-  if (first.status !== "edition_missing") return first;
+  if (first.status !== "edition_missing") {
+    // Direct success: this call created no edition, so `editionCreated` is false.
+    if (first.status === "saved") {
+      return { status: "saved", letter: first.letter, editionCreated: false };
+    }
+    return first;
+  }
 
   const ensured = await ensureEdition(fetcher, age);
   if (ensured.status === "unauthorized") return { status: "unauthorized" };

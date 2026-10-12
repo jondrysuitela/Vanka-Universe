@@ -36,6 +36,14 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# template tanpa nilai rahasia - boleh di-commit
+!.env.example
+.dev.vars
+.dev.vars.*
+
+# cloudflare / opennext
+/.open-next/
+/.wrangler/
 
 # vercel
 .vercel

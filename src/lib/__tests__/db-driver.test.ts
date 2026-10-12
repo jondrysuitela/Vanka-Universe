@@ -17,6 +17,7 @@ const h = vi.hoisted(() => {
       constructor(public readonly config: unknown) {}
       query(): void {}
     },
+    neon: vi.fn(() => ({ query: vi.fn() })),
     setTypeParser: vi.fn(),
   };
 });
@@ -26,7 +27,7 @@ vi.mock("pg", () => ({
   types: { setTypeParser: h.setTypeParser },
 }));
 vi.mock("@neondatabase/serverless", () => ({
-  Pool: h.neonPool,
+  neon: h.neon,
 }));
 // `server-only` throws when imported outside Next's bundler; no-op for tests.
 vi.mock("server-only", () => ({}));
@@ -41,6 +42,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.resetModules();
   h.setTypeParser.mockClear();
+  h.neon.mockClear();
 });
 
 describe("getPool driver selection", () => {
@@ -74,13 +76,13 @@ describe("getPool driver selection", () => {
     expect(typeof pool.query).toBe("function");
   });
 
-  it("selects the neon pool when DB_DRIVER=neon", async () => {
+  it("selects the neon HTTP driver when DB_DRIVER=neon (no WebSocket pool)", async () => {
     vi.stubEnv("DB_DRIVER", "neon");
     vi.stubEnv("DATABASE_URL", DUMMY_URL);
     const db = await loadDb();
     const pool = db.getPool();
-    expect(pool).toBeInstanceOf(h.neonPool);
-    expect((pool as unknown as { config: { max: number } }).config).toMatchObject({ max: 5 });
+    expect(h.neon).toHaveBeenCalledWith(DUMMY_URL);
+    expect(pool).not.toBeInstanceOf(h.neonPool);
     expect(typeof pool.query).toBe("function");
   });
 

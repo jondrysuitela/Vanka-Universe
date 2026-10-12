@@ -40,7 +40,7 @@ export default function AdminSidebar() {
           <Link href="/" className="text-lg font-display tracking-widest text-[#fdf3d8]">
             Vanka Universe
           </Link>
-          <p className="text-xs mt-1 text-[#fdf3d8]/60">Panel Admin · Demo Lokal</p>
+          <p className="text-xs mt-1 text-[#fdf3d8]/60">Panel Admin</p>
         </div>
         <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
           {NAV.map((item) => {

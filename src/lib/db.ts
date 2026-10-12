@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Pool as NeonPool } from "@neondatabase/serverless";
+import { neon } from "@neondatabase/serverless";
 import { Pool as PgPool, types as pgTypes } from "pg";
 
 /**
@@ -8,16 +8,22 @@ import { Pool as PgPool, types as pgTypes } from "pg";
  *
  * DB_DRIVER selects the PostgreSQL client:
  *  - "pg"   : node-postgres over a plain TCP connection (local development).
- *  - "neon" : @neondatabase/serverless over Neon's WebSocket transport
- *             (production / Neon).
+ *  - "neon" : @neondatabase/serverless stateless HTTP driver
+ *             (production / Neon / Cloudflare Workers).
  *
  * The choice is explicit server-side configuration — the driver is NEVER
  * guessed from the shape of DATABASE_URL and there is NO silent fallback
  * between drivers. An empty or unknown DB_DRIVER is a configuration error
  * that fails fast when getPool() is first called.
  *
- * - The pool is created lazily: importing this module does NOT open a
+ * - The client is created lazily: importing this module does NOT open a
  *   connection. Connections only start when a query is executed.
+ * - The "neon" driver is the stateless HTTP driver on purpose: it keeps no
+ *   WebSocket and no connection between requests. A module-level pool over
+ *   WebSocket hangs in Cloudflare Workers once the runtime tears down the
+ *   previous request's I/O ("your Worker's code had hung"). Because every
+ *   query here is a single statement (never a BEGIN/COMMIT spanning calls),
+ *   the stateless driver is a drop-in replacement.
  * - DATABASE_URL is never exposed to the client and never logged here.
  * - All queries must use parameters (`$1`, `$2`, ...). Never interpolate user
  *   input into SQL.
@@ -54,6 +60,21 @@ function resolveDriver(): DbDriver {
   return driver as DbDriver;
 }
 
+/**
+ * Neon's stateless HTTP driver: every query is an independent HTTPS request.
+ * No WebSocket, no connection reuse, nothing that survives the end of a
+ * request — the only shape that is safe in the Workers runtime.
+ */
+function createNeonPool(connectionString: string): DbPool {
+  const sql = neon(connectionString);
+  return {
+    async query<T>(text: string, values?: unknown[]): Promise<{ rows: T[] }> {
+      const rows = await sql.query(text, (values ?? []) as unknown[]);
+      return { rows: rows as T[] };
+    },
+  };
+}
+
 function createPool(driver: DbDriver): DbPool {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -61,7 +82,7 @@ function createPool(driver: DbDriver): DbPool {
     throw new Error("Database is not configured on this server.");
   }
   if (driver === "neon") {
-    return new NeonPool({ connectionString, max: POOL_MAX });
+    return createNeonPool(connectionString);
   }
   return new PgPool({ connectionString, max: POOL_MAX });
 }
