@@ -70,6 +70,7 @@ function mediaRecord(overrides: Record<string, unknown> = {}) {
     ownerId: ADMIN_ID,
     ownerLabel: "Admin Owner",
     createdAt: "2026-01-01T00:00:00.000Z",
+    collection: "birthday",
     title: null,
     description: null,
     takenAt: null,
@@ -97,6 +98,19 @@ function uploadHeaders(cookie?: string): Headers {
 function uploadBody(): FormData {
   const form = new FormData();
   form.append("file", new File([new Uint8Array([1, 2, 3, 4])], "foto.png", { type: "image/png" }));
+  return form;
+}
+
+function uploadBodyWithCollection(collection: string): FormData {
+  const form = uploadBody();
+  form.append("collection", collection);
+  return form;
+}
+
+function uploadBodyWithMetadata(title: string, description: string): FormData {
+  const form = uploadBody();
+  form.append("title", title);
+  form.append("description", description);
   return form;
 }
 
@@ -549,6 +563,116 @@ describe("upload size guard (4G.22)", () => {
     );
     expect(res.status).toBe(201);
     expect(vi.mocked(saveMediaUpload)).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("upload pool tag (4G.42B)", () => {
+  it("defaults an upload with no collection to birthday and passes it through", async () => {
+    setupSession(fake, true, "owner");
+    vi.mocked(saveMediaUpload).mockResolvedValue(mediaRecord() as never);
+
+    const res = await listPost(
+      new Request(`${BASE}/api/media`, {
+        method: "POST",
+        headers: uploadHeaders(COOKIE),
+        body: uploadBody(),
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(vi.mocked(saveMediaUpload)).toHaveBeenCalledWith(
+      expect.objectContaining({ id: ADMIN_ID }),
+      expect.any(File),
+      "birthday",
+    );
+  });
+
+  it("stores an archive upload into the archive pool", async () => {
+    setupSession(fake, true, "owner");
+    vi.mocked(saveMediaUpload).mockResolvedValue(mediaRecord({ collection: "archive" }) as never);
+
+    const res = await listPost(
+      new Request(`${BASE}/api/media`, {
+        method: "POST",
+        headers: uploadHeaders(COOKIE),
+        body: uploadBodyWithCollection("archive"),
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect((await json(res)).data).toMatchObject({ collection: "archive" });
+    expect(vi.mocked(saveMediaUpload)).toHaveBeenCalledWith(
+      expect.objectContaining({ id: ADMIN_ID }),
+      expect.any(File),
+      "archive",
+    );
+  });
+
+  it("rejects an unknown collection with 422 and never touches the store", async () => {
+    setupSession(fake, true, "owner");
+    const res = await listPost(
+      new Request(`${BASE}/api/media`, {
+        method: "POST",
+        headers: uploadHeaders(COOKIE),
+        body: uploadBodyWithCollection("hacker"),
+      }),
+    );
+    expect(res.status).toBe(422);
+    expect((await json(res)).error).toMatchObject({ code: "INVALID_COLLECTION" });
+    expect(vi.mocked(saveMediaUpload)).not.toHaveBeenCalled();
+  });
+});
+
+describe("upload metadata (4G.42C)", () => {
+  it("passes judul and keterangan through as upload-time metadata", async () => {
+    setupSession(fake, true, "owner");
+    vi.mocked(saveMediaUpload).mockResolvedValue(mediaRecord() as never);
+
+    const res = await listPost(
+      new Request(`${BASE}/api/media`, {
+        method: "POST",
+        headers: uploadHeaders(COOKIE),
+        body: uploadBodyWithMetadata("  Senyum pertama  ", "  Foto pagi hari  "),
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(vi.mocked(saveMediaUpload)).toHaveBeenCalledWith(
+      expect.objectContaining({ id: ADMIN_ID }),
+      expect.any(File),
+      "birthday",
+      { title: "Senyum pertama", description: "Foto pagi hari" },
+    );
+  });
+
+  it("omits metadata entirely when only whitespace is supplied", async () => {
+    setupSession(fake, true, "owner");
+    vi.mocked(saveMediaUpload).mockResolvedValue(mediaRecord() as never);
+
+    const res = await listPost(
+      new Request(`${BASE}/api/media`, {
+        method: "POST",
+        headers: uploadHeaders(COOKIE),
+        body: uploadBodyWithMetadata("   ", ""),
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(vi.mocked(saveMediaUpload)).toHaveBeenCalledWith(
+      expect.objectContaining({ id: ADMIN_ID }),
+      expect.any(File),
+      "birthday",
+    );
+  });
+
+  it("rejects an overlong judul with 422 and never touches the store", async () => {
+    setupSession(fake, true, "owner");
+    const res = await listPost(
+      new Request(`${BASE}/api/media`, {
+        method: "POST",
+        headers: uploadHeaders(COOKIE),
+        body: uploadBodyWithMetadata("x".repeat(201), "ok"),
+      }),
+    );
+    expect(res.status).toBe(422);
+    expect((await json(res)).error).toMatchObject({ code: "TITLE_TOO_LONG" });
+    expect(vi.mocked(saveMediaUpload)).not.toHaveBeenCalled();
   });
 });
 

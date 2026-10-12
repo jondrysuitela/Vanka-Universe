@@ -1,5 +1,10 @@
 import { isUndefinedTableError, MediaObjectsUnavailableError } from "@/lib/media/db/errors";
-import type { MediaKind, MediaMetadataPatch, MediaRecord } from "@/lib/media/storage/types";
+import type {
+  MediaCollection,
+  MediaKind,
+  MediaMetadataPatch,
+  MediaRecord,
+} from "@/lib/media/storage/types";
 
 /**
  * Repository for `media_objects` (Tahap 4G.40D-3B).
@@ -33,6 +38,7 @@ export interface MediaObjectRow {
   owner_id: string | null;
   owner_label: string | null;
   created_at: string;
+  collection: MediaCollection;
   title: string | null;
   description: string | null;
   taken_at: string | null;
@@ -49,11 +55,15 @@ export interface InsertPendingMediaObjectInput {
   displayName: string;
   ownerId: string | null;
   ownerLabel: string | null;
+  collection?: MediaCollection;
+  /** Optional upload-time metadata (trimmed upstream; null when absent). */
+  title?: string | null;
+  description?: string | null;
 }
 
 const RETURN_COLUMNS =
   "id, status, storage_provider, storage_key, mime_type, kind, file_size, display_name, " +
-  "owner_id, owner_label, created_at, title, description, taken_at, updated_at";
+  "owner_id, owner_label, created_at, collection, title, description, taken_at, updated_at";
 
 /** Map a DB row to the existing public `MediaRecord` shape. */
 export function rowToRecord(row: MediaObjectRow): MediaRecord {
@@ -66,6 +76,7 @@ export function rowToRecord(row: MediaObjectRow): MediaRecord {
     ownerId: row.owner_id ?? "",
     ownerLabel: row.owner_label ?? "",
     createdAt: row.created_at,
+    collection: row.collection ?? "birthday",
     title: row.title,
     description: row.description,
     takenAt: row.taken_at,
@@ -101,8 +112,8 @@ export async function insertPendingMediaObject(
     pool,
     `INSERT INTO media_objects
        (id, status, storage_provider, storage_key, mime_type, kind,
-        file_size, display_name, owner_id, owner_label)
-     VALUES ($1, 'pending', $2, $3, $4, $5, $6, $7, $8, $9)
+        file_size, display_name, owner_id, owner_label, collection, title, description)
+     VALUES ($1, 'pending', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING ${RETURN_COLUMNS}`,
     [
       input.id,
@@ -114,6 +125,9 @@ export async function insertPendingMediaObject(
       input.displayName,
       input.ownerId,
       input.ownerLabel,
+      input.collection ?? "birthday",
+      input.title ?? null,
+      input.description ?? null,
     ],
   );
   return rows[0];
@@ -238,8 +252,9 @@ export async function reinsertMediaObjectRow(
     pool,
     `INSERT INTO media_objects
        (id, status, storage_provider, storage_key, mime_type, kind, file_size,
-        display_name, owner_id, owner_label, created_at, title, description, taken_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        display_name, owner_id, owner_label, created_at, title, description, taken_at,
+        collection)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
      ON CONFLICT (id) DO NOTHING
      RETURNING ${RETURN_COLUMNS}`,
     [
@@ -257,6 +272,7 @@ export async function reinsertMediaObjectRow(
       row.title,
       row.description,
       row.taken_at,
+      row.collection ?? "birthday",
     ],
   );
   return rows[0] ?? null;

@@ -13,7 +13,7 @@ import { BIRTHDAY_THEMES } from "@/lib/birthday/theme-registry";
  * Contracts (from the implemented APIs):
  *  - GET  /api/birthday/letters        -> { data: ServerLetter[] }
  *  - POST /api/birthday/editions       -> 201 { data } | 409 EDITION_EXISTS
- *  - POST /api/birthday/letters        -> 200 { data } | 409 EDITION_NOT_FOUND | 409 LETTER_LOCKED
+ *  - POST /api/birthday/letters        -> 200 { data } | 409 EDITION_NOT_FOUND | 409 LETTER_PUBLISHED | 409 LETTER_LOCKED
  *  - errors                            -> { error: { code, message, details? } }
  *
  * Writes are DRAFT-ONLY: this module never calls any publish workflow and never
@@ -185,6 +185,7 @@ export type SaveLetterResult =
   | { status: "saved"; letter: ServerLetter }
   | { status: "edition_missing" }
   | { status: "locked" }
+  | { status: "published" }
   | { status: "validation"; message: string }
   | { status: "unauthorized" }
   | { status: "unavailable" };
@@ -214,6 +215,7 @@ export async function saveLetter(
   if (res.status === 409) {
     const { code } = errorInfo(await readJson(res));
     if (code === "EDITION_NOT_FOUND") return { status: "edition_missing" };
+    if (code === "LETTER_PUBLISHED") return { status: "published" };
     if (code === "LETTER_LOCKED") return { status: "locked" };
     return { status: "unavailable" };
   }
@@ -223,6 +225,7 @@ export async function saveLetter(
 export type ServerSaveOutcome =
   | { status: "saved"; letter: ServerLetter; editionCreated: boolean }
   | { status: "locked" }
+  | { status: "published" }
   | { status: "validation"; message: string }
   | { status: "unauthorized" }
   | { status: "unavailable" };
@@ -336,6 +339,13 @@ export function saveOutcomeMessage(outcome: ServerSaveOutcome, age: number): Use
         type: "error",
         title: "Tidak dapat ditimpa",
         message: "Surat edisi ini sudah bukan draf dan tidak dapat ditimpa dari sini.",
+      };
+    case "published":
+      return {
+        type: "error",
+        title: "Sudah tayang — dibekukan",
+        message:
+          "Edisi ini sudah lewat tanggal ulang tahunnya, jadi suratnya sudah tayang dan dibekukan. Perubahan tidak dikirim; versi publik tidak berubah.",
       };
     case "unauthorized":
       return {

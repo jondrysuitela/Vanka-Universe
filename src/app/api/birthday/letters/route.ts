@@ -1,4 +1,5 @@
 import { ApiError, assertSafeMutation, jsonError, jsonOk, requireRole, requireSession } from "@/lib/auth/guard";
+import { cycleWindowForYear, isCycleRevealed } from "@/lib/birthday/cycle";
 import { letterEditionIdentity } from "@/lib/birthday/persistence";
 import { BIRTHDAY_LETTER_ROLES } from "@/lib/birthday/letters/policy";
 import { upsertBirthdayLetterSchema } from "@/lib/birthday/letters/schema";
@@ -15,6 +16,11 @@ import {
  * Both require a valid admin session AND an operator role (owner/admin).
  * Writes are draft-only: `status` is hardcoded server-side and the input schema
  * rejects any client-supplied status/authorship/timestamp keys.
+ *
+ * FREEZE: an edition whose birthday has passed is PUBLISHED by date — its letter
+ * is immutable. The write is refused with `409 LETTER_PUBLISHED` so the publicly
+ * served version can never drift after it goes live. (The public read
+ * `GET /api/birthday/letter` exposes the letter from the reveal instant on.)
  */
 
 export async function GET(request: Request): Promise<Response> {
@@ -51,6 +57,21 @@ export async function POST(request: Request): Promise<Response> {
     const identity = letterEditionIdentity(parsed.data.age);
     if (!identity) {
       return jsonError(422, "INVALID_AGE", "Usia edisi di luar katalog.");
+    }
+
+    // Published-by-date: once the birthday has passed the letter is FROZEN, so
+    // the public version served after the reveal can never change underfoot.
+    if (isCycleRevealed(identity.year, new Date())) {
+      return jsonError(
+        409,
+        "LETTER_PUBLISHED",
+        `Surat edisi ${identity.year} sudah tayang dan dibekukan; tidak dapat diubah lagi.`,
+        {
+          year: identity.year,
+          age: identity.age,
+          revealAt: cycleWindowForYear(identity.year)?.revealAt.toISOString() ?? null,
+        },
+      );
     }
 
     const editionId = await selectEditionIdByYear(identity.year);

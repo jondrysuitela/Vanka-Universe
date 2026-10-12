@@ -7,7 +7,13 @@ import path from "node:path";
 import { ApiError } from "@/lib/auth/guard";
 import type { SessionAdmin } from "@/lib/auth/session";
 import { MIME_MAP, sniffMime } from "@/lib/media/storage/mime";
-import type { MediaMetadataPatch, MediaRecord, MediaStore } from "@/lib/media/storage/types";
+import type {
+  MediaCollection,
+  MediaMetadataPatch,
+  MediaRecord,
+  MediaStore,
+  MediaUploadMetadata,
+} from "@/lib/media/storage/types";
 import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "@/lib/media/storage/types";
 
 /**
@@ -68,11 +74,13 @@ async function readIndex(): Promise<MediaRecord[]> {
 
 /**
  * Backward-compatible normalization: records written before metadata existed
- * (or from an older format) get `null` metadata instead of `undefined`.
+ * (or from an older format) get `null` metadata instead of `undefined`, and
+ * records written before pools existed default to `birthday`.
  */
 function normalizeRecord(record: MediaRecord): MediaRecord {
   return {
     ...record,
+    collection: record.collection ?? "birthday",
     title: typeof record.title === "string" ? record.title : null,
     description: typeof record.description === "string" ? record.description : null,
     takenAt: typeof record.takenAt === "string" ? record.takenAt : null,
@@ -129,7 +137,12 @@ async function list(): Promise<MediaRecord[]> {
   return readIndex();
 }
 
-async function save(admin: SessionAdmin, file: File): Promise<MediaRecord> {
+async function save(
+  admin: SessionAdmin,
+  file: File,
+  collection: MediaCollection = "birthday",
+  metadata?: MediaUploadMetadata,
+): Promise<MediaRecord> {
   const buf = Buffer.from(await file.arrayBuffer());
   const mime = sniffMime(buf);
   if (!mime) {
@@ -164,8 +177,9 @@ async function save(admin: SessionAdmin, file: File): Promise<MediaRecord> {
     ownerId: admin.id,
     ownerLabel: admin.name,
     createdAt: new Date().toISOString(),
-    title: null,
-    description: null,
+    collection,
+    title: metadata?.title?.trim() || null,
+    description: metadata?.description?.trim() || null,
     takenAt: null,
   };
 

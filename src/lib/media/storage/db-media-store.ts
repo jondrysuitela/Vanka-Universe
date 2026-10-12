@@ -19,7 +19,13 @@ import {
 import { MediaMetadataIntegrityError } from "@/lib/media/db/errors";
 import { MIME_MAP, extensionForMime, sniffMime } from "@/lib/media/storage/mime";
 import type { MediaObjectClient } from "@/lib/media/storage/object-client";
-import type { MediaMetadataPatch, MediaRecord, MediaStore } from "@/lib/media/storage/types";
+import type {
+  MediaCollection,
+  MediaMetadataPatch,
+  MediaRecord,
+  MediaStore,
+  MediaUploadMetadata,
+} from "@/lib/media/storage/types";
 import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "@/lib/media/storage/types";
 
 /**
@@ -82,7 +88,12 @@ export function createDbMediaStore(options: DbMediaStoreOptions): MediaStore {
     return row ? rowToRecord(row) : null;
   }
 
-  async function save(admin: SessionAdmin, file: File): Promise<MediaRecord> {
+  async function save(
+    admin: SessionAdmin,
+    file: File,
+    collection: MediaCollection = "birthday",
+    metadata?: MediaUploadMetadata,
+  ): Promise<MediaRecord> {
     const bytes = Buffer.from(await file.arrayBuffer());
     const mime = sniffMime(bytes);
     if (!mime) {
@@ -109,6 +120,9 @@ export function createDbMediaStore(options: DbMediaStoreOptions): MediaStore {
       displayName,
       ownerId: admin.id,
       ownerLabel: admin.name,
+      collection,
+      title: metadata?.title?.trim() || null,
+      description: metadata?.description?.trim() || null,
     });
 
     // Window 2: object upload.

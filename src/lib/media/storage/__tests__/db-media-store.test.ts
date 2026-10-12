@@ -6,6 +6,7 @@ import type { SessionAdmin } from "@/lib/auth/session";
 import type { DbPool } from "@/lib/db";
 import { MediaMetadataIntegrityError } from "@/lib/media/db/errors";
 import { listMediaObjectsByStatus, type MediaObjectRow } from "@/lib/media/db/repository";
+import type { MediaCollection } from "@/lib/media/storage/types";
 import { createDbMediaStore } from "@/lib/media/storage/db-media-store";
 import type { MediaObjectClient } from "@/lib/media/storage/object-client";
 
@@ -38,6 +39,7 @@ function createMemoryPool() {
           owner_id: (params[7] as string | null) ?? null,
           owner_label: (params[8] as string | null) ?? null,
           created_at: new Date(2026, 0, 1, 0, 0, rows.size).toISOString(),
+          collection: (params[9] as MediaCollection) ?? "birthday",
           title: null,
           description: null,
           taken_at: null,
@@ -65,6 +67,7 @@ function createMemoryPool() {
           title: (params[11] as string | null) ?? null,
           description: (params[12] as string | null) ?? null,
           taken_at: (params[13] as string | null) ?? null,
+          collection: (params[14] as MediaCollection) ?? "birthday",
           updated_at: String(params[10]),
         };
         rows.set(id, restored);
@@ -203,6 +206,7 @@ describe("createDbMediaStore — upload lifecycle", () => {
       owner_id: "admin-1",
       owner_label: "Owner",
       created_at: "2026-01-01T00:00:00.000Z",
+      collection: "birthday",
       title: null,
       description: null,
       taken_at: null,

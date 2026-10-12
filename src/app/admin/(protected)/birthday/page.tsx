@@ -16,6 +16,7 @@ import {
   type LetterSection,
 } from "@/components/birthday/LetterScene";
 import { BIRTHDAY_THEMES, getThemeByAge } from "@/lib/birthday/theme-registry";
+import { isCycleRevealed } from "@/lib/birthday/cycle";
 import {
   loadLetters,
   reconcileLetter,
@@ -85,6 +86,12 @@ export default function AdminBirthdayPage() {
   const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
   const [serverLetters, setServerLetters] = useState<Map<number, ServerLetter>>(new Map());
   const [savingToServer, setSavingToServer] = useState(false);
+
+  // Published-by-date: an edition whose birthday has passed is FROZEN — the
+  // server refuses further writes — so the editor must not offer a save that can
+  // only fail. The public version is the letter as it stood at the reveal.
+  const frozenYear = selectedAge == null ? null : (getThemeByAge(selectedAge)?.year ?? null);
+  const frozen = frozenYear !== null && isCycleRevealed(frozenYear, new Date());
 
   function applyDraft(draft: LetterDraft) {
     setLetterTitle(draft.title);
@@ -198,6 +205,15 @@ export default function AdminBirthdayPage() {
    */
   async function saveToServer() {
     if (selectedAge == null || savingToServer) return;
+    if (frozen) {
+      showToast({
+        title: "Sudah tayang — dibekukan",
+        message:
+          "Edisi ini sudah lewat tanggal ulang tahunnya; suratnya dibekukan dan tidak dikirim ulang ke server.",
+        type: "error",
+      });
+      return;
+    }
     const age = selectedAge;
     setSavingToServer(true);
     try {
@@ -267,6 +283,21 @@ export default function AdminBirthdayPage() {
     saveLetterForAge(selectedAge, currentDraft());
     setSavedAges(listSavedLetterAges());
     router.push(`/birthday-experience?preview=1&letter=1&age=${selectedAge}`);
+  }
+
+  /**
+   * Preview the WHOLE experience for this edition from its very beginning: the
+   * gift box → the opening frame (this edition's chosen thumbnail) → the letter
+   * → the memory box. The local draft is saved first so the preview shows exactly
+   * what is in the editor (same rule as "Preview Surat"). `full=1` is what makes
+   * the page load the edited draft instead of the bundled default — without it
+   * the opening frame falls back to the honest placeholder.
+   */
+  function previewExperience() {
+    if (selectedAge == null) return;
+    saveLetterForAge(selectedAge, currentDraft());
+    setSavedAges(listSavedLetterAges());
+    router.push(`/birthday-experience?preview=1&full=1&age=${selectedAge}`);
   }
 
   function updateSection(id: string, patch: Partial<LetterSection>) {
@@ -532,7 +563,9 @@ export default function AdminBirthdayPage() {
                 <button
                   type="button"
                   onClick={saveLetter}
-                  className="rounded-lg border border-white/15 px-6 py-2.5 text-sm text-[#fdf3d8]/90 hover:bg-white/5 transition-colors"
+                  disabled={frozen}
+                  title={frozen ? "Edisi ini sudah tayang — surat dibekukan." : undefined}
+                  className="rounded-lg border border-white/15 px-6 py-2.5 text-sm text-[#fdf3d8]/90 hover:bg-white/5 transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
                 >
                   Simpan Draf Lokal
                 </button>
@@ -545,13 +578,29 @@ export default function AdminBirthdayPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={previewExperience}
+                  className="rounded-lg border border-[#f6d77a]/40 px-6 py-2.5 text-sm text-[#f6d77a] hover:bg-[#f6d77a]/10 transition-colors"
+                >
+                  Preview Pengalaman
+                </button>
+                <button
+                  type="button"
                   onClick={saveToServer}
-                  disabled={savingToServer}
-                  className="rounded-lg bg-emerald-400/20 border border-emerald-300/40 px-6 py-2.5 text-sm text-emerald-100 hover:bg-emerald-400/30 transition-colors disabled:opacity-45"
+                  disabled={savingToServer || frozen}
+                  title={frozen ? "Edisi ini sudah tayang — surat dibekukan." : undefined}
+                  className="rounded-lg bg-emerald-400/20 border border-emerald-300/40 px-6 py-2.5 text-sm text-emerald-100 hover:bg-emerald-400/30 transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
                 >
                   {savingToServer ? "Menyimpan ke server…" : "Simpan ke Server"}
                 </button>
               </div>
+
+              {frozen && (
+                <p className="rounded-lg border border-[#f6d77a]/40 bg-[#f6d77a]/10 px-4 py-3 text-xs text-[#fdf3d8]/85">
+                  Edisi {frozenYear} sudah <strong>tayang</strong> — suratnya dibekukan otomatis
+                  sejak tanggal ulang tahunnya, jadi versi publik tidak berubah lagi. Menyimpan ke
+                  server tidak tersedia untuk edisi yang sudah tayang.
+                </p>
+              )}
 
               {(selectedRecon?.diverged || selectedRecon?.serverOnly) && selectedServer && (
                 <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-4 space-y-3">
@@ -571,8 +620,9 @@ export default function AdminBirthdayPage() {
                     <button
                       type="button"
                       onClick={saveToServer}
-                      disabled={savingToServer}
-                      className="rounded-lg border border-emerald-300/40 px-4 py-2 text-xs text-emerald-100 hover:bg-emerald-400/10 transition-colors disabled:opacity-45"
+                      disabled={savingToServer || frozen}
+                      title={frozen ? "Edisi ini sudah tayang — surat dibekukan." : undefined}
+                      className="rounded-lg border border-emerald-300/40 px-4 py-2 text-xs text-emerald-100 hover:bg-emerald-400/10 transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
                     >
                       Kirim Draf Lokal ke Server
                     </button>

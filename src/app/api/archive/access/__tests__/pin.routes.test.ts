@@ -41,7 +41,7 @@ function setupDb(
     rows: [{ password_hash: opts.passwordHash ?? null }],
     rowCount: 1,
   }));
-  fake.when("UPDATE private_archives p", () => ({
+  fake.when("INSERT INTO private_archives (slug, status, created_by, pin_hash", () => ({
     rows: [{ access_version: 2 }],
     rowCount: 1,
   }));
@@ -73,7 +73,7 @@ function errorCode(payload: Record<string, unknown>): string | undefined {
 
 function pinCalls(fake: Fake): Array<[string, unknown[]?]> {
   return fake.query.mock.calls.filter(([sql]) =>
-    String(sql).includes("UPDATE private_archives p"),
+    String(sql).includes("INSERT INTO private_archives (slug, status, created_by, pin_hash"),
   );
 }
 
@@ -198,9 +198,16 @@ describe("PUT /api/archive/access/pin", () => {
     expect(calls).toHaveLength(1);
     const [sql, params] = calls[0];
     const statement = String(sql);
-    expect(statement).toContain("pin_hash = $3");
+    // Regression guard: the "ensure row then UPDATE" variant used a
+    // `WITH ensure AS (INSERT ...) ... UPDATE` CTE, which reads ONE snapshot and
+    // silently updated 0 rows on the very first PIN change. The upsert MUST stay
+    // a single INSERT ... ON CONFLICT DO UPDATE.
+    expect(statement).not.toMatch(/WITH\s+ensure/i);
+    expect(statement).toContain("INSERT INTO private_archives");
+    expect(statement).toContain("ON CONFLICT (slug) DO UPDATE");
+    expect(statement).toContain("pin_hash = EXCLUDED.pin_hash");
     expect(statement).toContain("pin_updated_at = now()");
-    expect(statement).toContain("access_version = p.access_version + 1");
+    expect(statement).toContain("access_version = private_archives.access_version + 1");
 
     const storedHash = (params as unknown[])[2];
     expect(typeof storedHash).toBe("string");
@@ -229,7 +236,7 @@ describe("PUT /api/archive/access/pin", () => {
 
   it("fails closed with a safe 503 when the schema is missing, without claiming success", async () => {
     setupDb(fake, { admin: adminRow("owner"), passwordHash: adminPasswordHash });
-    fake.when("UPDATE private_archives p", () => {
+    fake.when("INSERT INTO private_archives (slug, status, created_by, pin_hash", () => {
       throw Object.assign(new Error("relation does not exist"), { code: "42P01" });
     });
     const res = await pinPut(
@@ -264,7 +271,7 @@ describe("PUT /api/archive/access/pin", () => {
     ).toBe(false);
     // No access_version bump happens when throttled.
     expect(
-      fake.query.mock.calls.some(([sql]) => String(sql).includes("access_version = p.access_version + 1")),
+      fake.query.mock.calls.some(([sql]) => String(sql).includes("access_version = private_archives.access_version + 1")),
     ).toBe(false);
   });
 

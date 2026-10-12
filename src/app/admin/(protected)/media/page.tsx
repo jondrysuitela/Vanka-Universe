@@ -1,14 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  DEFAULT_LETTER_DRAFT,
+  EMPTY_LETTER_DRAFT,
+  loadLetterForAge,
+  saveLetterForAge,
+  type LetterDraft,
+} from "@/components/birthday/LetterScene";
 import { useToast } from "@/components/admin/ui/ToastProvider";
+import { cycleForDate, isCycleRevealed } from "@/lib/birthday/cycle";
 
 /**
  * Pustaka Media — upload photos/videos to the private local server store.
  *
  * No mock data. File type (magic bytes), size limits, authentication, and the
- * private (non-`public/`) store are unchanged. Metadata edit and delete are NOT
- * supported by the current API, so they are not shown here.
+ * private (non-`public/`) store are unchanged. Uploads can carry an optional
+ * Judul ("title") dan Keterangan ("description") which are stored with the
+ * record; saved images in the birthday pool can be set as the opening
+ * thumbnail of the birthday experience (written into the edition's browser
+ * draft, then sent to the server from "Tulis Surat" when final).
  */
 
 type MediaKind = "image" | "video";
@@ -36,6 +47,49 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Edition (age) this photo belongs to: the birthday cycle its UPLOAD time falls
+ * in — the same rule as the gallery. Unknown/out-of-registry cycles fall back to
+ * the age-1 edition.
+ */
+function editionAgeFor(item: SavedMedia): number {
+  return cycleForDate(new Date(item.createdAt))?.age ?? 1;
+}
+
+/**
+ * True when the photo's edition has already gone live: from the reveal instant
+ * the edition is FROZEN, so its opening thumbnail can no longer change (the
+ * server refuses the letter write). Falls back to `false` for an unknown cycle.
+ */
+function editionFrozen(item: SavedMedia): boolean {
+  const cycle = cycleForDate(new Date(item.createdAt));
+  return cycle !== null && isCycleRevealed(cycle.year, new Date());
+}
+
+/**
+ * "Jadikan Thumbnail" — writes this image into the opening-thumbnail field of
+ * the photo's birthday edition DRAFT (localStorage), so it shows up straight
+ * away in the birthday experience's opening frame. `src` points at the private
+ * `/api/media/[id]` (admin session). Only IMAGES in the BIRTHDAY pool can be the
+ * birthday-experience thumbnail; Arsip Ibu media is excluded, and an edition that
+ * has already gone live is frozen.
+ */
+function ThumbnailButton({ item, onSet }: { item: SavedMedia; onSet: (item: SavedMedia) => void }) {
+  if (item.kind !== "image" || item.collection === "archive") return null;
+  const frozen = editionFrozen(item);
+  return (
+    <button
+      type="button"
+      onClick={() => onSet(item)}
+      disabled={frozen}
+      title={frozen ? "Edisi ini sudah tayang — thumbnail dibekukan." : undefined}
+      className="inline-flex items-center gap-2 rounded-lg border border-[#f6d77a]/40 px-3 py-1.5 text-xs font-medium text-[#f6d77a] transition-colors hover:bg-[#f6d77a]/10 disabled:cursor-not-allowed disabled:opacity-45"
+    >
+      Jadikan Thumbnail
+    </button>
+  );
 }
 
 function validateFile(file: File): { kind: MediaKind } | { error: string } {
@@ -72,12 +126,19 @@ interface SavedMedia {
   kind: MediaKind;
   size: number;
   createdAt: string;
+  collection?: "birthday" | "archive";
+  title?: string | null;
+  description?: string | null;
 }
 
 export default function AdminMediaPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selected, setSelected] = useState<SelectedFile | null>(null);
   const [pickerError, setPickerError] = useState<string | null>(null);
+
+  // Optional upload-time metadata (judul + keterangan).
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadDescription, setUploadDescription] = useState("");
 
   const [saved, setSaved] = useState<SavedMedia[]>([]);
   const [listError, setListError] = useState<string | null>(null);
@@ -138,6 +199,8 @@ export default function AdminMediaPage() {
     setSelected(null);
     setPickerError(null);
     setSaveError(null);
+    setUploadTitle("");
+    setUploadDescription("");
     setPickerOpen(false);
   }
 
@@ -148,6 +211,8 @@ export default function AdminMediaPage() {
     try {
       const form = new FormData();
       form.append("file", selected.file, selected.name);
+      form.append("title", uploadTitle);
+      form.append("description", uploadDescription);
       const res = await fetch("/api/media", {
         method: "POST",
         headers: { "x-vanka-request": "1" },
@@ -172,6 +237,40 @@ export default function AdminMediaPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  /**
+   * Set a photo as the opening thumbnail of its birthday edition. Writes the
+   * BROWSER DRAFT only (the same store "Tulis Surat" edits); nothing is sent to
+   * the server here. The birthday experience reads this draft, so the frame
+   * appears immediately in preview.
+   */
+  function setThumbnail(item: SavedMedia) {
+    if (editionFrozen(item)) {
+      showToast({
+        title: "Sudah tayang — dibekukan",
+        message:
+          "Edisi foto ini sudah lewat tanggal ulang tahunnya; bingkai pembukanya dibekukan dan tidak dapat diubah lagi.",
+        type: "error",
+      });
+      return;
+    }
+    const age = editionAgeFor(item);
+    const base: LetterDraft =
+      loadLetterForAge(age) ?? (age === 1 ? DEFAULT_LETTER_DRAFT : EMPTY_LETTER_DRAFT);
+    saveLetterForAge(age, {
+      ...base,
+      thumbnail: {
+        src: `/api/media/${item.id}`,
+        alt: item.title?.trim() || item.name,
+        ...(item.description?.trim() ? { caption: item.description.trim() } : {}),
+      },
+    });
+    showToast({
+      title: "Thumbnail diset",
+      message: `Foto ini jadi bingkai pembuka ulang tahun ke-${age} (draf browser). Buka "Tulis Surat" + kirim ke server bila sudah final.`,
+      type: "success",
+    });
   }
 
   return (
@@ -262,6 +361,33 @@ export default function AdminMediaPage() {
                 </p>
               </div>
 
+              <div className="grid gap-3">
+                <label className="block">
+                  <span className="mb-1 block text-xs text-[#fdf3d8]/70">Judul (opsional)</span>
+                  <input
+                    type="text"
+                    value={uploadTitle}
+                    onChange={(event) => setUploadTitle(event.target.value)}
+                    maxLength={200}
+                    placeholder="Mis. Senyum pertama Vanka"
+                    className="w-full rounded-lg border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-[#fdf3d8] placeholder:text-[#fdf3d8]/40 focus:border-[#f6d77a]/60 focus:outline-none"
+                    aria-label="Judul media"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs text-[#fdf3d8]/70">Keterangan (opsional)</span>
+                  <textarea
+                    value={uploadDescription}
+                    onChange={(event) => setUploadDescription(event.target.value)}
+                    maxLength={5000}
+                    rows={3}
+                    placeholder="Cerita singkat di balik foto atau video ini…"
+                    className="w-full resize-y rounded-lg border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-[#fdf3d8] placeholder:text-[#fdf3d8]/40 focus:border-[#f6d77a]/60 focus:outline-none"
+                    aria-label="Keterangan media"
+                  />
+                </label>
+              </div>
+
               {saveError && (
                 <p role="alert" className="rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
                   {saveError}
@@ -348,11 +474,27 @@ export default function AdminMediaPage() {
                   )}
                 </div>
                 <div className="p-4 space-y-1">
-                  <h3 className="text-sm font-medium text-[#fdf3d8] break-all">{item.name}</h3>
+                  <h3 className="text-sm font-medium text-[#fdf3d8] break-all">
+                    {item.title?.trim() || item.name}
+                  </h3>
+                  {item.title?.trim() && item.name !== item.title?.trim() && (
+                    <p className="text-xs text-[#fdf3d8]/50 break-all">{item.name}</p>
+                  )}
+                  {item.description?.trim() && (
+                    <p className="text-xs text-[#fdf3d8]/75 leading-relaxed break-words">
+                      {item.description.trim()}
+                    </p>
+                  )}
                   <p className="text-xs text-[#fdf3d8]/60">
                     {item.kind === "image" ? "Gambar" : "Video"} · {formatBytes(item.size)}
                   </p>
-                  <p className="text-xs text-emerald-300/80">Tersimpan aman (R2)</p>
+                  <p className="text-xs text-emerald-300/80">
+                    Tersimpan aman (R2) · Pool{" "}
+                    {item.collection === "archive" ? "Arsip Ibu" : "Ulang Tahun"}
+                  </p>
+                  <div className="pt-2">
+                    <ThumbnailButton item={item} onSet={setThumbnail} />
+                  </div>
                 </div>
               </div>
             ))}

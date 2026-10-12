@@ -67,6 +67,7 @@ describe("media_objects draft migration — table contract", () => {
       "display_name",
       "owner_id",
       "owner_label",
+      "collection",
       "title",
       "description",
       "taken_at",
@@ -81,6 +82,12 @@ describe("media_objects draft migration — table contract", () => {
     expect(draft).toContain("CHECK (status IN ('pending','ready'))");
     expect(draft).toContain("CHECK (kind IN ('image','video'))");
     expect(draft).toContain("CREATE INDEX IF NOT EXISTS idx_media_objects_status");
+  });
+
+  it("tags every row with a collection pool defaulting to birthday (4G.42B)", () => {
+    expect(draft).toMatch(/collection\s+VARCHAR\(20\)\s+NOT NULL\s+DEFAULT\s+'birthday'/i);
+    expect(draft).toContain("CHECK (collection IN ('birthday','archive'))");
+    expect(draft).toContain("CREATE INDEX IF NOT EXISTS idx_media_objects_collection");
   });
 
   it("defaults status to pending and uses a server-supplied UUID", () => {

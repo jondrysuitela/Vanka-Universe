@@ -137,6 +137,73 @@ describe("media store (isolated)", () => {
     expect(record.mime).toBe("video/mp4");
   });
 
+  it("defaults uploads to the birthday pool and honors an explicit archive pool", async () => {
+    const store = await loadStore();
+    const birthday = await store.saveMediaUpload(
+      admin,
+      new File([pngBytes()], "b.png", { type: "image/png" }),
+    );
+    expect(birthday.collection).toBe("birthday");
+
+    const archive = await store.saveMediaUpload(
+      admin,
+      new File([pngBytes()], "a.png", { type: "image/png" }),
+      "archive",
+    );
+    expect(archive.collection).toBe("archive");
+
+    // Both survive a fresh read with their pool intact.
+    const list = await store.listMedia();
+    expect(list.find((r) => r.id === archive.id)?.collection).toBe("archive");
+    expect(list.find((r) => r.id === birthday.id)?.collection).toBe("birthday");
+  });
+
+  it("stores optional judul and keterangan supplied at upload time", async () => {
+    const store = await loadStore();
+    const record = await store.saveMediaUpload(
+      admin,
+      new File([pngBytes()], "foto.png", { type: "image/png" }),
+      "birthday",
+      { title: "  Senyum pertama  ", description: "  Foto pagi hari  " },
+    );
+    expect(record.title).toBe("Senyum pertama");
+    expect(record.description).toBe("Foto pagi hari");
+
+    // Metadata survives a fresh read from the index.
+    const fresh = (await store.listMedia()).find((r) => r.id === record.id);
+    expect(fresh?.title).toBe("Senyum pertama");
+    expect(fresh?.description).toBe("Foto pagi hari");
+  });
+
+  it("keeps metadata null when upload supplies none", async () => {
+    const store = await loadStore();
+    const record = await store.saveMediaUpload(
+      admin,
+      new File([pngBytes()], "kosong.png", { type: "image/png" }),
+    );
+    expect(record.title).toBeNull();
+    expect(record.description).toBeNull();
+  });
+
+  it("normalizes legacy records without a pool to birthday", async () => {
+    const store = await loadStore();
+    const legacy = await store.saveMediaUpload(
+      admin,
+      new File([pngBytes()], "legacy.png", { type: "image/png" }),
+    );
+    const indexRaw = readFileSync(indexFile(), "utf8");
+    const index = JSON.parse(indexRaw) as Array<Record<string, unknown>>;
+    const entry = index.find((r) => r.id === legacy.id);
+    expect(entry).toBeTruthy();
+
+    // Simulate a record written before pools existed (4G.42B).
+    delete entry?.collection;
+    writeFileSync(indexFile(), JSON.stringify(index));
+
+    const list = await store.listMedia();
+    expect(list.find((r) => r.id === legacy.id)?.collection).toBe("birthday");
+  });
+
   it("returns null for an unknown or unsafe id", async () => {
     const store = await loadStore();
     expect(await store.readMediaFile("00000000-0000-0000-0000-000000000000")).toBeNull();

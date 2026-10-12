@@ -84,4 +84,18 @@ describe("per-edition letter store (localStorage)", () => {
     window.localStorage.setItem(LETTERS_STORE_KEY, "{ not json");
     expect(loadLetterStore()).toEqual({});
   });
+
+  it("preserves the opening thumbnail through save + load (the media-page write)", () => {
+    // Pustaka Media → "Jadikan Thumbnail" writes exactly this shape into the
+    // edition draft; the experience reads it back for the opening frame.
+    saveLetterForAge(1, {
+      ...draft("Ayah"),
+      thumbnail: { src: "/api/media/abc", alt: "Vanka", caption: "Pertama" },
+    });
+    expect(loadLetterForAge(1)?.thumbnail).toEqual({
+      src: "/api/media/abc",
+      alt: "Vanka",
+      caption: "Pertama",
+    });
+  });
 });

@@ -15,6 +15,7 @@ vi.mock("@/lib/db", () => ({
 import type { SessionAdmin } from "@/lib/auth/session";
 import { MediaObjectsUnavailableError } from "@/lib/media/db/errors";
 import type { MediaObjectRow } from "@/lib/media/db/repository";
+import type { MediaCollection } from "@/lib/media/storage/types";
 import { createDbR2MediaStore } from "@/lib/media/storage/db-r2";
 import { describeMediaStoreError } from "@/lib/media/storage/error-mapping";
 import { R2ConfigError, type R2Config } from "@/lib/media/storage/r2";
@@ -118,6 +119,7 @@ function createMemoryPool() {
           owner_id: (params[7] as string | null) ?? null,
           owner_label: (params[8] as string | null) ?? null,
           created_at: "2026-01-01T00:00:00.000Z",
+          collection: (params[9] as MediaCollection) ?? "birthday",
           title: null,
           description: null,
           taken_at: null,
@@ -272,6 +274,7 @@ describe("createDbR2MediaStore — lifecycle", () => {
       owner_id: "admin-1",
       owner_label: "Owner",
       created_at: "2026-01-02T00:00:00.000Z",
+      collection: "birthday",
       title: null,
       description: null,
       taken_at: null,

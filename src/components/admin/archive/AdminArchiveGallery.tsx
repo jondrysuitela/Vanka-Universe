@@ -53,6 +53,62 @@ type MediaState =
   | { status: "unauthorized"; files: MediaFile[] }
   | { status: "unavailable"; files: MediaFile[] };
 
+/* ---------------------------------------------------------------------------
+ * Arsip-ibu upload (Tahap 4G.42B). Uploads here are tagged `collection=archive`
+ * so they land in the private archive pool — they never auto-join the birthday
+ * gallery, which only contains `collection='birthday'` media.
+ * ------------------------------------------------------------------------- */
+
+type UploadKind = "image" | "video";
+
+const UPLOAD_ALLOWED: ReadonlyArray<{ mime: string; exts: string[]; kind: UploadKind }> = [
+  { mime: "image/jpeg", exts: ["jpg", "jpeg"], kind: "image" },
+  { mime: "image/png", exts: ["png"], kind: "image" },
+  { mime: "image/webp", exts: ["webp"], kind: "image" },
+  { mime: "image/gif", exts: ["gif"], kind: "image" },
+  { mime: "video/mp4", exts: ["mp4"], kind: "video" },
+];
+
+const UPLOAD_ACCEPT =
+  ".jpg,.jpeg,.png,.webp,.gif,.mp4,image/jpeg,image/png,image/webp,image/gif,video/mp4";
+
+const UPLOAD_MAX_IMAGE = 10 * 1024 * 1024;
+const UPLOAD_MAX_VIDEO = 50 * 1024 * 1024;
+
+function uploadFormatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Early client-side filter only; the server re-validates magic bytes/size. */
+function validateUploadFile(file: File): { kind: UploadKind } | { error: string } {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const entry = UPLOAD_ALLOWED.find((t) => t.mime === file.type && t.exts.includes(ext));
+  if (!entry) {
+    return {
+      error: "Tipe file tidak didukung. Gunakan gambar JPEG, PNG, WebP, GIF, atau video MP4.",
+    };
+  }
+  const limit = entry.kind === "image" ? UPLOAD_MAX_IMAGE : UPLOAD_MAX_VIDEO;
+  if (file.size > limit) {
+    return {
+      error: `Ukuran file terlalu besar (${uploadFormatBytes(file.size)}). Maksimal ${
+        entry.kind === "image" ? "10 MB untuk gambar" : "50 MB untuk video"
+      }.`,
+    };
+  }
+  return { kind: entry.kind };
+}
+
+interface SelectedUpload {
+  file: File;
+  name: string;
+  size: number;
+  kind: UploadKind;
+  url: string;
+}
+
 export default function AdminArchiveGallery() {
   const { showToast } = useToast();
 
@@ -64,7 +120,21 @@ export default function AdminArchiveGallery() {
   const [pendingRemove, setPendingRemove] = useState<string | null>(null);
   const [confirmReload, setConfirmReload] = useState(false);
 
+  // Arsip-ibu upload widget state.
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadSelected, setUploadSelected] = useState<SelectedUpload | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
   const dirty = !galleryStatesEqual(gallery, baseline);
+
+  // Release the previous upload preview URL whenever selection changes/unmounts.
+  useEffect(() => {
+    const url = uploadSelected?.url;
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [uploadSelected]);
 
   // Initial load: media library + saved gallery. Never overwrites local edits
   // (this only runs on mount, before any edit exists).
@@ -107,6 +177,80 @@ export default function AdminArchiveGallery() {
     } else {
       setLoadState({ status: result.status });
       showToast(galleryLoadNote(result.status));
+    }
+  }
+
+  /** Reload the media library (used after an archive upload). Never fakes data. */
+  async function refreshMedia() {
+    const media = await loadMediaFiles(fetch);
+    setMediaState(
+      media.status === "ok"
+        ? { status: "ok", files: media.files }
+        : { status: media.status, files: [] },
+    );
+  }
+
+  function clearUploadSelection() {
+    setUploadSelected(null);
+    setUploadError(null);
+    setUploadOpen(false);
+  }
+
+  function handleUploadFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // Allow re-selecting the same file name/content later.
+    event.target.value = "";
+    if (!file) return;
+
+    const result = validateUploadFile(file);
+    if ("error" in result) {
+      setUploadError(result.error);
+      return;
+    }
+    setUploadError(null);
+    setUploadSelected({
+      file,
+      name: file.name,
+      size: file.size,
+      kind: result.kind,
+      url: URL.createObjectURL(file),
+    });
+  }
+
+  async function handleUploadSave() {
+    if (!uploadSelected || uploading) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const form = new FormData();
+      form.append("file", uploadSelected.file, uploadSelected.name);
+      // Pool tag: Arsip Ibu. Keeps this file out of the birthday gallery.
+      form.append("collection", "archive");
+      const res = await fetch("/api/media", {
+        method: "POST",
+        headers: { "x-vanka-request": "1" },
+        body: form,
+      });
+      const body = (await res.json().catch(() => null)) as
+        | { data?: unknown; error?: { message?: string } }
+        | null;
+      if (!res.ok || !body?.data) {
+        setUploadError(body?.error?.message ?? "Gagal menyimpan file ke server.");
+        return;
+      }
+      const url = uploadSelected.url;
+      URL.revokeObjectURL(url);
+      clearUploadSelection();
+      showToast({
+        title: "Tersimpan",
+        message: "File tersimpan di pool Arsip Ibu (tidak masuk galeri ulang tahun).",
+        type: "success",
+      });
+      await refreshMedia();
+    } catch {
+      setUploadError("Tidak dapat menghubungi server.");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -175,6 +319,16 @@ export default function AdminArchiveGallery() {
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
+            onClick={() => {
+              clearUploadSelection();
+              setUploadOpen((open) => !open);
+            }}
+            className="rounded-lg bg-gradient-to-r from-[#a8e6cf] to-[#d8f3e4] text-[#050814] px-5 py-2.5 text-sm font-medium hover:opacity-95 transition-opacity"
+          >
+            {uploadOpen ? "Tutup Upload" : "Tambah Media Arsip"}
+          </button>
+          <button
+            type="button"
             onClick={requestReload}
             className="rounded-lg border border-white/15 px-4 py-2.5 text-sm text-[#fdf3d8]/90 hover:bg-white/5"
           >
@@ -207,6 +361,116 @@ export default function AdminArchiveGallery() {
             ? "Memuat galeri tersimpan…"
             : galleryLoadNote(loadState.status).message}
         </p>
+      )}
+
+      {/* ------------------------------------------------ arsip-ibu upload */}
+      {uploadOpen && (
+        <section className="rounded-2xl border border-white/10 bg-[#0b1226]/70 backdrop-blur-xl p-6 space-y-4">
+          <div className="flex flex-col gap-1">
+            <h3 className="font-display text-lg text-[#fdf3d8]">Upload Media Arsip</h3>
+            <p className="text-xs text-[#fdf3d8]/60">
+              File ini masuk pool <span className="text-[#a8e6cf]">Arsip Ibu</span> — tidak pernah
+              otomatis muncul di galeri pengalaman ulang tahun. Gambar (JPEG/PNG/WebP/GIF) maks 10
+              MB · Video MP4 maks 50 MB. Tipe nyata diperiksa ulang oleh server.
+            </p>
+          </div>
+
+          <label className="flex w-full cursor-pointer items-center justify-center rounded-xl border border-dashed border-white/20 px-4 py-6 text-sm text-[#fdf3d8]/80 transition-colors hover:border-[#a8e6cf]/60 hover:text-[#fdf3d8] focus-within:border-[#a8e6cf]/60">
+            <span>Klik untuk memilih file dari perangkat…</span>
+            <input
+              type="file"
+              accept={UPLOAD_ACCEPT}
+              onChange={handleUploadFileChange}
+              className="sr-only"
+              aria-label="Pilih file media arsip"
+            />
+          </label>
+
+          {uploadError && (
+            <p
+              role="alert"
+              className="rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+            >
+              {uploadError}
+            </p>
+          )}
+
+          {uploadSelected ? (
+            <div className="space-y-4">
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+                <div className="flex items-center justify-center">
+                  {uploadSelected.kind === "image" ? (
+                    // Blob object URL: next/image cannot optimize it, so a plain
+                    // <img> is used deliberately for the local preview.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={uploadSelected.url}
+                      alt={`Pratinjau gambar ${uploadSelected.name}`}
+                      className="max-h-80 w-auto object-contain"
+                    />
+                  ) : (
+                    <video
+                      src={uploadSelected.url}
+                      controls
+                      preload="metadata"
+                      aria-label={`Pratinjau video ${uploadSelected.name}`}
+                      className="max-h-80 w-full object-contain"
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-[#fdf3d8]/85 space-y-1">
+                <p className="break-all">
+                  <span className="text-[#fdf3d8]/60">Nama file:</span> {uploadSelected.name}
+                </p>
+                <p>
+                  <span className="text-[#fdf3d8]/60">Ukuran:</span>{" "}
+                  {uploadFormatBytes(uploadSelected.size)}
+                </p>
+                <p className="pt-1 font-medium text-[#a8e6cf]">
+                  Pratinjau sementara — akan disimpan ke pool Arsip Ibu
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={handleUploadSave}
+                  disabled={uploading}
+                  className="rounded-lg bg-gradient-to-r from-[#a8e6cf] to-[#d8f3e4] px-6 py-2.5 text-sm font-semibold text-[#050814] transition-opacity hover:opacity-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8e6cf] disabled:opacity-50"
+                >
+                  {uploading ? "Menyimpan…" : "Simpan ke Server"}
+                </button>
+                <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-white/15 px-6 py-2.5 text-sm text-[#fdf3d8]/90 transition-colors hover:bg-white/5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#a8e6cf]">
+                  Ganti File
+                  <input
+                    type="file"
+                    accept={UPLOAD_ACCEPT}
+                    onChange={handleUploadFileChange}
+                    className="sr-only"
+                    aria-label="Ganti file media arsip"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={clearUploadSelection}
+                  className="rounded-lg border border-white/15 px-6 py-2.5 text-sm text-[#fdf3d8]/90 transition-colors hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f6d77a]"
+                >
+                  Batal
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={clearUploadSelection}
+              className="rounded-lg border border-white/15 px-6 py-2.5 text-sm text-[#fdf3d8]/90 transition-colors hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f6d77a]"
+            >
+              Batal
+            </button>
+          )}
+        </section>
       )}
 
       {/* ---------------------------------------------------- media library */}
@@ -258,7 +522,8 @@ export default function AdminArchiveGallery() {
 
         {videos.length === 0 ? (
           <p className="text-xs text-[#fdf3d8]/60">
-            Belum ada video tersimpan. Unggah video MP4 lewat halaman{" "}
+            Belum ada video tersimpan. Unggah video MP4 lewat tombol{" "}
+            <span className="text-[#a8e6cf]">Tambah Media Arsip</span> di halaman ini, atau lewat{" "}
             <Link href="/admin/media" className="underline hover:text-[#f6d77a]">
               Pustaka Media
             </Link>
@@ -293,7 +558,8 @@ export default function AdminArchiveGallery() {
         <h3 className="font-display text-lg text-[#fdf3d8]">Tambah Foto ke Galeri</h3>
         {images.length === 0 ? (
           <p className="text-xs text-[#fdf3d8]/60">
-            Belum ada foto tersimpan. Unggah foto lewat halaman{" "}
+            Belum ada foto tersimpan. Unggah foto lewat tombol{" "}
+            <span className="text-[#a8e6cf]">Tambah Media Arsip</span> di halaman ini, atau lewat{" "}
             <Link href="/admin/media" className="underline hover:text-[#f6d77a]">
               Pustaka Media
             </Link>

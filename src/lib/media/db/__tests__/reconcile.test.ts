@@ -29,6 +29,7 @@ function rowFor(id: string, createdAt: string): MediaObjectRow {
     owner_id: "admin-1",
     owner_label: "Owner",
     created_at: createdAt,
+    collection: "birthday",
     title: null,
     description: null,
     taken_at: null,

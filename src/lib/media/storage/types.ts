@@ -15,6 +15,18 @@ import type { SessionAdmin } from "@/lib/auth/session";
 
 export type MediaKind = "image" | "video";
 
+/**
+ * Media collection pool (Tahap 4G.42B).
+ *
+ * Every upload lands in exactly one pool, decided at UPLOAD time (server-set,
+ * never client-editable afterwards):
+ *  - `birthday` — default. Anything not explicitly archived belongs to the
+ *    birthday-cycle gallery (see the cycle window in `birthday/cycle.ts`).
+ *  - `archive`  — the private "Arsip Ibu" pool. NEVER auto-included in the
+ *    birthday gallery, and never publicly revealable through it.
+ */
+export type MediaCollection = "birthday" | "archive";
+
 export interface MediaRecord {
   id: string;
   name: string;
@@ -25,6 +37,8 @@ export interface MediaRecord {
   ownerLabel: string;
   /** Upload timestamp (server-set, never client-writable). */
   createdAt: string;
+  /** Which pool this upload belongs to (server-set at upload time). */
+  collection: MediaCollection;
   /** Human-editable metadata (null until edited). */
   title: string | null;
   description: string | null;
@@ -37,6 +51,16 @@ export interface MediaMetadataPatch {
   title?: string | null;
   description?: string | null;
   takenAt?: string | null;
+}
+
+/**
+ * Optional human metadata supplied AT UPLOAD time (convenience — the admin can
+ * still edit it later via PATCH). Both fields are trimmed server-side; empty
+ * values become `null`.
+ */
+export interface MediaUploadMetadata {
+  title?: string | null;
+  description?: string | null;
 }
 
 /** Result of reading an object: its metadata plus the bytes. */
@@ -52,7 +76,12 @@ export interface MediaReadResult {
  */
 export interface MediaStore {
   list(): Promise<MediaRecord[]>;
-  save(admin: SessionAdmin, file: File): Promise<MediaRecord>;
+  save(
+    admin: SessionAdmin,
+    file: File,
+    collection?: MediaCollection,
+    metadata?: MediaUploadMetadata,
+  ): Promise<MediaRecord>;
   read(id: string): Promise<MediaReadResult | null>;
   find(id: string): Promise<MediaRecord | null>;
   updateMetadata(id: string, patch: MediaMetadataPatch): Promise<MediaRecord | null>;

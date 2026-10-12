@@ -13,7 +13,13 @@ import {
 import { ApiError } from "@/lib/auth/guard";
 import type { SessionAdmin } from "@/lib/auth/session";
 import { MIME_MAP, extensionForMime, sniffMime } from "@/lib/media/storage/mime";
-import type { MediaMetadataPatch, MediaRecord, MediaStore } from "@/lib/media/storage/types";
+import type {
+  MediaCollection,
+  MediaMetadataPatch,
+  MediaRecord,
+  MediaStore,
+  MediaUploadMetadata,
+} from "@/lib/media/storage/types";
 import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "@/lib/media/storage/types";
 
 /**
@@ -193,6 +199,7 @@ async function bodyToBuffer(body: unknown): Promise<Buffer | null> {
 function normalizeRecord(record: MediaRecord): MediaRecord {
   return {
     ...record,
+    collection: record.collection ?? "birthday",
     title: typeof record.title === "string" ? record.title : null,
     description: typeof record.description === "string" ? record.description : null,
     takenAt: typeof record.takenAt === "string" ? record.takenAt : null,
@@ -289,7 +296,12 @@ export function createR2MediaStore(options: R2MediaOptions = {}): MediaStore {
     return run;
   }
 
-  async function save(admin: SessionAdmin, file: File): Promise<MediaRecord> {
+  async function save(
+    admin: SessionAdmin,
+    file: File,
+    collection: MediaCollection = "birthday",
+    metadata?: MediaUploadMetadata,
+  ): Promise<MediaRecord> {
     const bytes = Buffer.from(await file.arrayBuffer());
     const mime = sniffMime(bytes);
     if (!mime) {
@@ -312,8 +324,9 @@ export function createR2MediaStore(options: R2MediaOptions = {}): MediaStore {
       ownerId: admin.id,
       ownerLabel: admin.name,
       createdAt: new Date().toISOString(),
-      title: null,
-      description: null,
+      collection,
+      title: metadata?.title?.trim() || null,
+      description: metadata?.description?.trim() || null,
       takenAt: null,
     };
 

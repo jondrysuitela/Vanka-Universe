@@ -68,6 +68,15 @@ export async function selectArchiveAccessConfig(): Promise<ArchiveAccessConfig |
  * schema is missing. A missing row after the statement is an error, never a
  * silent "PIN changed".
  *
+ * Implementation note (regression guard): this MUST stay a single
+ * `INSERT ... ON CONFLICT DO UPDATE`. An earlier variant used
+ * `WITH ensure AS (INSERT ...) ... UPDATE ... FROM target`, which looked
+ * equivalent but silently updated 0 rows: every part of ONE data-modifying
+ * statement reads the SAME snapshot, so the `UPDATE` could not see the row the
+ * CTE had just inserted. The first-ever PIN change then created the archive row,
+ * changed no column, and surfaced as a generic 500. Do not reintroduce a
+ * CTE-based read-back here.
+ *
  * The plaintext PIN never reaches this module; only the pre-computed hash.
  */
 export async function setArchivePin(adminId: string, pinHash: string): Promise<number> {
@@ -77,25 +86,13 @@ export async function setArchivePin(adminId: string, pinHash: string): Promise<n
   const pool = getPool();
   try {
     const result = await pool.query<{ access_version: number | string }>(
-      `WITH ensure AS (
-         INSERT INTO private_archives (slug, status, created_by)
-         VALUES ($1, 'draft', $2)
-         ON CONFLICT (slug) DO NOTHING
-         RETURNING slug
-       ),
-       target AS (
-         SELECT slug FROM ensure
-         UNION ALL
-         SELECT slug FROM private_archives WHERE slug = $1
-         LIMIT 1
-       )
-       UPDATE private_archives p
-          SET pin_hash = $3,
-              pin_updated_at = now(),
-              access_version = p.access_version + 1
-         FROM target t
-        WHERE p.slug = t.slug
-       RETURNING p.access_version`,
+      `INSERT INTO private_archives (slug, status, created_by, pin_hash, pin_updated_at, access_version)
+       VALUES ($1, 'draft', $2, $3, now(), 1)
+       ON CONFLICT (slug) DO UPDATE
+         SET pin_hash = EXCLUDED.pin_hash,
+             pin_updated_at = now(),
+             access_version = private_archives.access_version + 1
+       RETURNING access_version`,
       [PRIVATE_ARCHIVE_SLUG, adminId, pinHash],
     );
     const row = result.rows[0];

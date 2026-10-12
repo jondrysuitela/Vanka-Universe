@@ -251,6 +251,32 @@ describe("POST /api/birthday/letters", () => {
     expect((params as unknown[])[6]).toBe(OWNER_ID);
     expect((params as unknown[]).some((p) => p === "published")).toBe(false);
   });
+
+  it("freezes an already-published edition (409 LETTER_PUBLISHED, no write)", async () => {
+    // After the 2026 birthday the edition is live → the letter is immutable.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-01T00:00:00.000Z"));
+    try {
+      setupDb(fake, { admin: adminRow("owner"), editionId: EDITION_ID, savedRow: letterRow() });
+      const res = await createPost(
+        new Request(`${BASE}/api/birthday/letters`, {
+          method: "POST",
+          headers: mutationHeaders(sessionCookie("owner")),
+          body: body(),
+        }),
+      );
+      expect(res.status).toBe(409);
+      expect((await json(res)).error).toMatchObject({ code: "LETTER_PUBLISHED" });
+      expect(insertCalls(fake)).toHaveLength(0);
+      expect(
+        fake.query.mock.calls.some(([sql]) =>
+          String(sql).includes("SELECT id FROM birthday_editions"),
+        ),
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("GET /api/birthday/letters/[age]", () => {

@@ -113,7 +113,7 @@ export default function Home() {
           transition={{ duration: 1, ease: "easeOut", delay: 0.1 }}
         >
           <span className="rounded-full border border-[#e9c67c]/45 bg-[#0b1226]/70 px-5 py-2 font-sans text-[0.68rem] font-medium uppercase tracking-[0.4em] text-[#f6e3b2] backdrop-blur-md">
-            First Orbit · 27 October 2026
+            First Orbit · Live
           </span>
 
           <h1 className="gold-glow bg-gradient-to-b from-[#fdf3d8] via-[#eecb8b] to-[#c99b53] bg-clip-text font-display text-5xl leading-[1.05] text-transparent sm:text-7xl lg:text-8xl">

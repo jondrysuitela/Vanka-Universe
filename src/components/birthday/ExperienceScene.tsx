@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import LetterScene, { type LetterDraft, type LetterThumbnail } from "./LetterScene";
+import type { GalleryItem } from "@/lib/birthday/gallery/client-sync";
 
 /**
  * Experience flow:
@@ -34,35 +35,53 @@ interface ExperienceSceneProps {
   letterDraft?: LetterDraft;
   letterPreview?: boolean;
   thumbnail?: LetterThumbnail;
+  /**
+   * Real birthday-gallery media, oldest first, when a cycle is revealed (or on
+   * admin preview). When undefined/empty the gallery keeps the honest cosmic
+   * placeholder — it never claims to be a real photo of Vanka.
+   */
+  galleryItems?: GalleryItem[];
+  /**
+   * Byte-URL builder for one gallery item. Defaults to the PUBLIC revealed
+   * route. Admin preview (before the reveal) must pass the ADMIN route
+   * `/api/media/[id]`, which needs the session cookie and bypasses the date
+   * gate.
+   */
+  mediaSrc?: (id: string) => string;
 }
 
 /* ---------------------------------------------------------------------------
  * Gallery media for the memory box.
  *
- * Replace the items below with real local assets placed in `public/`, e.g.:
- *   { kind: "image", src: "/media/vanka-first-smile.jpg", alt: "Vanka's first smile", caption: "First smile" }
- *   { kind: "video", src: "/media/vanka-first-laugh.mp4",  alt: "Vanka's first laugh on video", caption: "First laugh" }
- *
- * The "empty" kind renders an honest cosmic placeholder — it never claims to
- * be a real photo of Vanka. Uploaded (private) media is NOT wired in here.
+ * Items arrive from the engine (see `client-sync.ts` + the gallery API). The
+ * bytes are streamed through `/api/birthday/gallery/media/[id]`, which only
+ * serves media whose cycle has been revealed. No placeholder below ever claims
+ * to be a real photo of Vanka.
  * ------------------------------------------------------------------------- */
 
 type GalleryKind = "image" | "video" | "empty";
 
-interface GalleryItem {
-  kind: GalleryKind;
-  alt: string;
-  src?: string;
-  caption?: string;
+/** Item used when there is no real media yet — the honest cosmic placeholder. */
+const PLACEHOLDER_ITEM: GalleryItem = {
+  id: "placeholder",
+  kind: "image",
+  mime: "",
+  name: "",
+  title: "Tempat untuk foto Vanka yang akan diisi saat edisi ulang tahun diterbitkan",
+  description: "Foto & video tahun pertama Vanka akan hidup di sini.",
+  takenAt: null,
+  createdAt: "",
+};
+
+/** Public byte URL for one revealed gallery item. */
+export function galleryMediaUrl(id: string): string {
+  return `/api/birthday/gallery/media/${id}`;
 }
 
-const GALLERY: GalleryItem[] = [
-  {
-    kind: "empty",
-    alt: "Tempat untuk foto Vanka yang akan diisi saat edisi ulang tahun diterbitkan",
-    caption: "Foto & video tahun pertama Vanka akan hidup di sini.",
-  },
-];
+/** Caption shown under a frame: the admin title, else the file name. */
+function itemCaption(item: GalleryItem): string {
+  return item.title?.trim() || item.name;
+}
 
 /** Deterministic, lightweight star field (no randomness on first paint). */
 function Stars({ count = 26 }: { count?: number }) {
@@ -101,9 +120,49 @@ function Stars({ count = 26 }: { count?: number }) {
 }
 
 /** Renders the actual media for a frame: image, video, or the honest placeholder. */
-function FrameMedia({ kind, src, alt }: { kind: GalleryKind; src?: string; alt: string }) {
+function FrameMedia({
+  kind,
+  src,
+  alt,
+  kenBurns = false,
+}: {
+  kind: GalleryKind;
+  src?: string;
+  alt: string;
+  /**
+   * Slow "Ken Burns" drift so a still photo does not feel frozen. Only the
+   * memory-box gallery asks for it; the opening thumbnail stays still.
+   */
+  kenBurns?: boolean;
+}) {
   if (kind === "image" && src) {
-    return <Image src={src} alt={alt} fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover" />;
+    // `unoptimized` is REQUIRED here: every media URL is an API route
+    // (`/api/media/[id]` for the admin preview, `/api/birthday/gallery/media/[id]`
+    // in public). Next's image optimizer fetches such a URL internally with NO
+    // cookies, so a session-gated route answers 401 and the frame stays empty.
+    // Skipping the optimizer lets the BROWSER fetch it with the session cookie.
+    const image = (
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        sizes="(max-width: 768px) 100vw, 50vw"
+        className="object-cover"
+        unoptimized
+      />
+    );
+    if (!kenBurns) return image;
+    // The wrapper is the positioned ancestor that `fill` needs, and clipping it
+    // keeps the drift inside the rounded frame.
+    return (
+      <motion.div
+        className="absolute inset-0 overflow-hidden"
+        animate={{ scale: [1, 1.08, 1] }}
+        transition={{ duration: 20, ease: "easeInOut", repeat: Infinity, repeatType: "reverse" }}
+      >
+        {image}
+      </motion.div>
+    );
   }
   if (kind === "video" && src) {
     return (
@@ -148,65 +207,129 @@ function PhotoFrame({
   alt,
   className,
   footer,
+  kenBurns,
 }: {
   kind: GalleryKind;
   src?: string;
   alt: string;
   className?: string;
   footer?: ReactNode;
+  kenBurns?: boolean;
 }) {
   return (
     <figure
       className={`relative w-full overflow-hidden rounded-3xl border border-[#e9c67c]/25 ${className ?? ""}`}
     >
-      <FrameMedia kind={kind} src={src} alt={alt} />
+      <FrameMedia kind={kind} src={src} alt={alt} kenBurns={kenBurns} />
       {footer}
     </figure>
   );
 }
 
-function Gallery() {
+/**
+ * A gallery frame mapped from engine items: real media bytes, or the honest
+ * placeholder for the placeholder item. PhotoFrame stays shared with the
+ * opening thumbnail.
+ */
+function GalleryFrame({
+  item,
+  className,
+  footer,
+  getMediaUrl,
+  kenBurns,
+}: {
+  item: GalleryItem;
+  className?: string;
+  footer?: ReactNode;
+  getMediaUrl: (id: string) => string;
+  kenBurns?: boolean;
+}) {
+  if (item.id === PLACEHOLDER_ITEM.id) {
+    return (
+      <PhotoFrame
+        kind="empty"
+        src={undefined}
+        alt={item.title ?? ""}
+        className={className}
+        footer={footer}
+      />
+    );
+  }
+  return (
+    <PhotoFrame
+      kind={item.kind}
+      src={getMediaUrl(item.id)}
+      alt={itemCaption(item)}
+      className={className}
+      footer={footer}
+      kenBurns={kenBurns}
+    />
+  );
+}
+
+/**
+ * The memory-box gallery viewer. Renders engine items when present; otherwise
+ * a single honest cosmic placeholder — it never claims a real photo exists.
+ */
+function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (id: string) => string }) {
   const [index, setIndex] = useState(0);
+  const [dir, setDir] = useState(1);
   const reduce = useReducedMotion();
 
-  const item = GALLERY[index % GALLERY.length];
-  const goPrev = () => setIndex((i) => (i - 1 + GALLERY.length) % GALLERY.length);
-  const goNext = () => setIndex((i) => (i + 1) % GALLERY.length);
+  const list = items.length > 0 ? items : [PLACEHOLDER_ITEM];
+  const item = list[index % list.length];
+  const goPrev = () => {
+    setDir(-1);
+    setIndex((i) => (i - 1 + list.length) % list.length);
+  };
+  const goNext = () => {
+    setDir(1);
+    setIndex((i) => (i + 1) % list.length);
+  };
+  const goTo = (i: number) => {
+    setDir(i >= index ? 1 : -1);
+    setIndex(i);
+  };
 
+  // Direction-aware entrance: the next photo slides in from the side you asked
+  // for and the previous one leaves the other way. Reduced motion keeps a fade.
   const frameFade = {
-    initial: reduce ? { opacity: 0 } : { opacity: 0, scale: 0.985 },
-    animate: reduce ? { opacity: 1 } : { opacity: 1, scale: 1 },
+    initial: reduce ? { opacity: 0 } : { opacity: 0, x: dir * 48, scale: 0.97 },
+    animate: reduce ? { opacity: 1 } : { opacity: 1, x: 0, scale: 1 },
+    exit: reduce ? { opacity: 0 } : { opacity: 0, x: dir * -48, scale: 0.97 },
   };
 
   return (
     <div className="flex w-full max-w-3xl flex-col items-center gap-4">
-      <motion.div
-        key={`${item.kind}-${index}`}
-        {...frameFade}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="w-full"
-      >
-        <PhotoFrame
-          kind={item.kind}
-          src={item.src}
-          alt={item.alt}
-          className="aspect-[4/5] max-w-md sm:aspect-[16/9] sm:max-w-3xl"
-          footer={
-            <figcaption className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-5 pb-4 pt-12 text-left">
-              <p className="font-sans text-xs text-[#f6e3b2]">{item.caption ?? item.alt}</p>
-              <p className="mt-0.5 font-sans text-[0.65rem] uppercase tracking-[0.25em] text-white/55">
-                {index + 1} / {GALLERY.length}
-              </p>
-            </figcaption>
-          }
-        />
-      </motion.div>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={`${item.id}-${index}`}
+          {...frameFade}
+          transition={{ duration: reduce ? 0 : 0.5, ease: "easeOut" }}
+          className="flex w-full justify-center"
+        >
+          <GalleryFrame
+            item={item}
+            getMediaUrl={getMediaUrl}
+            kenBurns={!reduce}
+            className="aspect-[3/4] w-full max-w-xs sm:max-w-sm"
+            footer={
+              <figcaption className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-5 pb-4 pt-12 text-left">
+                <p className="font-sans text-xs text-[#f6e3b2]">{itemCaption(item)}</p>
+                <p className="mt-0.5 font-sans text-[0.65rem] uppercase tracking-[0.25em] text-white/55">
+                  {index + 1} / {list.length}
+                </p>
+              </figcaption>
+            }
+          />
+        </motion.div>
+      </AnimatePresence>
 
       <div className="flex w-full max-w-2xl items-center justify-between gap-3">
         <button
           type="button"
           onClick={goPrev}
-          disabled={GALLERY.length <= 1}
+          disabled={list.length <= 1}
           aria-label="Foto atau video sebelumnya"
           className="rounded-full border border-white/20 px-4 py-2 font-sans text-xs uppercase tracking-[0.18em] text-white/70 transition duration-300 hover:border-[#e9c67c] hover:text-[#f6e3b2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c] disabled:opacity-35"
         >
@@ -214,20 +337,29 @@ function Gallery() {
         </button>
 
         <div className="flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Thumbnail galeri">
-          {GALLERY.map((g, i) => (
+          {list.map((g, i) => (
             <button
               key={i}
               type="button"
-              onClick={() => setIndex(i)}
-              aria-label={`Tampilkan: ${g.caption ?? g.alt}`}
+              onClick={() => goTo(i)}
+              aria-label={`Tampilkan: ${itemCaption(g)}`}
               aria-current={i === index ? "true" : undefined}
               className={`relative h-12 w-16 overflow-hidden rounded-lg border transition duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e9c67c] ${
-                i === index ? "border-[#e9c67c]/80" : "border-white/15 opacity-70 hover:opacity-100"
+                i === index
+                  ? "scale-110 border-[#e9c67c]/80 shadow-[0_0_18px_-4px_rgba(233,198,124,0.8)]"
+                  : "border-white/15 opacity-70 hover:scale-105 hover:opacity-100"
               }`}
             >
-              {g.kind === "image" && g.src ? (
-                <Image src={g.src} alt="" fill sizes="64px" className="object-cover" />
-              ) : g.kind === "video" && g.src ? (
+              {g.id !== PLACEHOLDER_ITEM.id && g.kind === "image" ? (
+                <Image
+                  src={getMediaUrl(g.id)}
+                  alt=""
+                  fill
+                  sizes="64px"
+                  className="object-cover"
+                  unoptimized
+                />
+              ) : g.id !== PLACEHOLDER_ITEM.id && g.kind === "video" ? (
                 <span className="flex h-full w-full items-center justify-center bg-[#0b1226] text-[#f6e3b2]">
                   ▶
                 </span>
@@ -243,7 +375,7 @@ function Gallery() {
         <button
           type="button"
           onClick={goNext}
-          disabled={GALLERY.length <= 1}
+          disabled={list.length <= 1}
           aria-label="Foto atau video berikutnya"
           className="rounded-full border border-white/20 px-4 py-2 font-sans text-xs uppercase tracking-[0.18em] text-white/70 transition duration-300 hover:border-[#e9c67c] hover:text-[#f6e3b2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c] disabled:opacity-35"
         >
@@ -261,11 +393,21 @@ const MEMORY_PARTICLES = Array.from({ length: 16 }, (_, i) => {
 });
 
 /**
- * Second box ("Kotak Kenangan"). Opening it reveals the existing gallery with
- * its title and description. Reuses <Gallery /> — it does NOT auto-publish
- * uploads: only items already listed in GALLERY are shown.
+ * Second box ("Kotak Kenangan"). Opening it reveals the gallery: real engine
+ * media when a cycle is revealed (or admin preview), else the honest
+ * placeholder.
  */
-function MemoryBox({ onReadLetter, onRestart }: { onReadLetter: () => void; onRestart: () => void }) {
+function MemoryBox({
+  onReadLetter,
+  onRestart,
+  items,
+  getMediaUrl,
+}: {
+  onReadLetter: () => void;
+  onRestart: () => void;
+  items: GalleryItem[];
+  getMediaUrl: (id: string) => string;
+}) {
   const reduce = useReducedMotion();
   const openingRef = useRef(false);
   const [opening, setOpening] = useState(false);
@@ -366,7 +508,7 @@ function MemoryBox({ onReadLetter, onRestart }: { onReadLetter: () => void; onRe
             transition={{ duration: reduce ? 0 : 0.7, ease: "easeOut" }}
             className="flex w-full flex-col items-center"
           >
-            <Gallery />
+            <Gallery items={items} getMediaUrl={getMediaUrl} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -399,8 +541,14 @@ export default function ExperienceScene({
   letterDraft,
   letterPreview,
   thumbnail,
+  galleryItems = [],
+  mediaSrc,
 }: ExperienceSceneProps) {
   const reduce = useReducedMotion();
+
+  // Public: the revealed-media route. Admin preview before the reveal: the
+  // admin media route (session + role), which is not date-gated.
+  const getMediaUrl = mediaSrc ?? galleryMediaUrl;
 
   const frame = thumbnail ?? {
     alt: "Bingkai foto pembuka Vanka",
@@ -447,6 +595,7 @@ export default function ExperienceScene({
                 kind={frame.src ? "image" : "empty"}
                 src={frame.src}
                 alt={frame.alt}
+                kenBurns={frame.src ? !reduce : false}
                 className="aspect-[4/5] max-w-xs sm:aspect-[4/5] sm:max-w-sm"
               />
               <span className="rounded-full border border-[#e9c67c]/45 bg-[#0b1226]/70 px-5 py-2 font-sans text-[0.68rem] font-medium uppercase tracking-[0.4em] text-[#f6e3b2] backdrop-blur-md">
@@ -479,7 +628,12 @@ export default function ExperienceScene({
 
           {active === 2 && (
             <motion.div key="scene-2" {...fade} transition={{ duration: 0.9, ease: "easeOut" }} className="flex w-full flex-col items-center gap-8 text-center">
-              <MemoryBox onReadLetter={onPrev} onRestart={onRestart} />
+              <MemoryBox
+              onReadLetter={onPrev}
+              onRestart={onRestart}
+              items={galleryItems}
+              getMediaUrl={getMediaUrl}
+            />
             </motion.div>
           )}
 

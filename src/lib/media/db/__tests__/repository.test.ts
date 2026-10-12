@@ -31,6 +31,7 @@ const row: MediaObjectRow = {
   owner_id: "admin-1",
   owner_label: "Owner",
   created_at: "2026-01-01T00:00:00.000Z",
+  collection: "birthday",
   title: null,
   description: null,
   taken_at: null,
@@ -59,6 +60,7 @@ describe("rowToRecord", () => {
       ownerId: "admin-1",
       ownerLabel: "Owner",
       createdAt: "2026-01-01T00:00:00.000Z",
+      collection: "birthday",
       title: null,
       description: null,
       takenAt: null,
@@ -86,6 +88,7 @@ describe("insertPendingMediaObject", () => {
     const [sql, params] = call as [string, unknown[]];
     expect(sql).toContain("INSERT INTO media_objects");
     expect(sql).toContain("'pending'");
+    expect(sql).toContain("collection");
     expect(sql).not.toContain("foto.png");
     expect(params).toEqual([
       row.id,
@@ -97,6 +100,9 @@ describe("insertPendingMediaObject", () => {
       "foto.png",
       "admin-1",
       "Owner",
+      "birthday",
+      null,
+      null,
     ]);
   });
 
@@ -202,6 +208,7 @@ describe("delete and reinsert", () => {
       row.title,
       row.description,
       row.taken_at,
+      row.collection,
     ]);
   });
 

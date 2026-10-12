@@ -2,7 +2,12 @@ import "server-only";
 
 import type { SessionAdmin } from "@/lib/auth/session";
 import { getMediaStore } from "@/lib/media/storage";
-import type { MediaMetadataPatch, MediaRecord } from "@/lib/media/storage/types";
+import type {
+  MediaCollection,
+  MediaMetadataPatch,
+  MediaRecord,
+  MediaUploadMetadata,
+} from "@/lib/media/storage/types";
 
 /**
  * Media store facade (Tahap 4G.40C).
@@ -15,15 +20,20 @@ import type { MediaMetadataPatch, MediaRecord } from "@/lib/media/storage/types"
  */
 
 export { MediaIndexError } from "@/lib/media/storage/filesystem";
-export type { MediaKind, MediaRecord, MediaMetadataPatch } from "@/lib/media/storage/types";
+export type { MediaKind, MediaRecord, MediaMetadataPatch, MediaUploadMetadata } from "@/lib/media/storage/types";
 export { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, MAX_REQUEST_BYTES } from "@/lib/media/storage/types";
 
 export async function listMedia(): Promise<MediaRecord[]> {
   return getMediaStore().list();
 }
 
-export async function saveMediaUpload(admin: SessionAdmin, file: File): Promise<MediaRecord> {
-  return getMediaStore().save(admin, file);
+export async function saveMediaUpload(
+  admin: SessionAdmin,
+  file: File,
+  collection?: MediaCollection,
+  metadata?: MediaUploadMetadata,
+): Promise<MediaRecord> {
+  return getMediaStore().save(admin, file, collection, metadata);
 }
 
 export async function readMediaFile(

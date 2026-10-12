@@ -4,6 +4,9 @@ import { checkMediaReferences } from "@/lib/media/references";
 // Side-effect: registers the private-archive gallery reference probe so DELETE
 // stays fail-closed for media used by Arsip Ibu (Tahap 4G.39D). Read-only.
 import "@/lib/archive/gallery-references";
+// Side-effect: registers the birthday-gallery reference probe so DELETE stays
+// fail-closed for media that has already become public (Tahap 4G.42). Read-only.
+import "@/lib/birthday/gallery/references";
 import { updateMediaMetadataSchema } from "@/lib/media/schema";
 import { describeMediaStoreError } from "@/lib/media/storage/error-mapping";
 import {

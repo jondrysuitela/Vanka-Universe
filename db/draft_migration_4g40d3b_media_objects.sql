@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS media_objects (
   display_name     VARCHAR(255) NOT NULL,
   owner_id         UUID REFERENCES admins(id) ON DELETE SET NULL,
   owner_label      VARCHAR(255),
+  collection       VARCHAR(20) NOT NULL DEFAULT 'birthday',  -- birthday|archive (4G.42B)
   title            VARCHAR(255),
   description      TEXT,
   taken_at         DATE,
@@ -62,6 +63,7 @@ CREATE TABLE IF NOT EXISTS media_objects (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT chk_media_objects_status   CHECK (status IN ('pending','ready')),
   CONSTRAINT chk_media_objects_kind     CHECK (kind IN ('image','video')),
+  CONSTRAINT chk_media_objects_collection CHECK (collection IN ('birthday','archive')),
   CONSTRAINT chk_media_objects_size     CHECK (file_size >= 0),
   CONSTRAINT chk_media_objects_provider CHECK (storage_provider IN ('r2','s3'))
 );
@@ -69,6 +71,7 @@ CREATE TABLE IF NOT EXISTS media_objects (
 CREATE INDEX IF NOT EXISTS idx_media_objects_status     ON media_objects(status);
 CREATE INDEX IF NOT EXISTS idx_media_objects_created_at ON media_objects(created_at);
 CREATE INDEX IF NOT EXISTS idx_media_objects_owner      ON media_objects(owner_id);
+CREATE INDEX IF NOT EXISTS idx_media_objects_collection ON media_objects(collection);
 
 DROP TRIGGER IF EXISTS trg_media_objects_updated_at ON media_objects;
 CREATE TRIGGER trg_media_objects_updated_at
@@ -88,12 +91,14 @@ DECLARE
   fk_ok               boolean;
   trigger_ok          boolean;
   status_default      text;
+  collection_default  text;
 BEGIN
   SELECT string_agg(c.name, ', ' ORDER BY c.name) INTO missing_columns
     FROM (VALUES
       ('id'), ('status'), ('storage_provider'), ('storage_key'), ('mime_type'),
       ('kind'), ('file_size'), ('display_name'), ('owner_id'), ('owner_label'),
-      ('title'), ('description'), ('taken_at'), ('created_at'), ('updated_at')
+      ('collection'), ('title'), ('description'), ('taken_at'), ('created_at'),
+      ('updated_at')
     ) AS c(name)
    WHERE NOT EXISTS (
      SELECT 1 FROM information_schema.columns
@@ -108,7 +113,8 @@ BEGIN
   SELECT string_agg(x.name, ', ' ORDER BY x.name) INTO missing_constraints
     FROM (VALUES
       ('chk_media_objects_status'), ('chk_media_objects_kind'),
-      ('chk_media_objects_size'), ('chk_media_objects_provider')
+      ('chk_media_objects_collection'), ('chk_media_objects_size'),
+      ('chk_media_objects_provider')
     ) AS x(name)
    WHERE NOT EXISTS (
      SELECT 1 FROM pg_constraint
@@ -154,6 +160,13 @@ BEGIN
    WHERE table_schema = 'public' AND table_name = 'media_objects' AND column_name = 'status';
   IF status_default IS NULL OR status_default NOT ILIKE '%pending%' THEN
     RAISE EXCEPTION 'media_objects sudah ada tetapi bentuknya salah; default status bukan pending (%).', status_default;
+  END IF;
+
+  SELECT column_default INTO collection_default
+    FROM information_schema.columns
+   WHERE table_schema = 'public' AND table_name = 'media_objects' AND column_name = 'collection';
+  IF collection_default IS NULL OR collection_default NOT ILIKE '%birthday%' THEN
+    RAISE EXCEPTION 'media_objects sudah ada tetapi bentuknya salah; default collection bukan birthday (%).', collection_default;
   END IF;
 END $structure$;
 

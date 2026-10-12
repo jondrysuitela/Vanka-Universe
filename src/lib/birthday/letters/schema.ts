@@ -20,9 +20,12 @@ export const letterSectionSchema = z.strictObject({
 });
 
 /**
- * Opening thumbnail — mirrors `LetterThumbnail`. `src` must be a PUBLIC path
- * (never a private `/api/media` id); an empty/absent `src` keeps the honest
- * placeholder. `alt` is required by the contract.
+ * Opening thumbnail — mirrors `LetterThumbnail`. `alt` is required by the
+ * contract. `src` is either a plain public path (e.g. `/media/vanka.jpg`) or the
+ * private admin media route `/api/media/[id]` used by the "Tulis Surat" editor;
+ * a public read rewrites the latter to the date-gated gallery route (see
+ * `letters/public-view.ts`), so the private path is never served publicly. An
+ * empty/absent `src` keeps the honest placeholder.
  */
 export const letterThumbnailSchema = z.strictObject({
   src: z.string().trim().max(2000).optional(),

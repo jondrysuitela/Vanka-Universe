@@ -2,9 +2,56 @@ import { ApiError, jsonError, jsonOk, requireRole, requireSession } from "@/lib/
 import { MEDIA_OPERATOR_ROLES } from "@/lib/media/policy";
 import { limitRequestBody } from "@/lib/media/request-body";
 import { describeMediaStoreError } from "@/lib/media/storage/error-mapping";
+import type {
+  MediaCollection,
+  MediaUploadMetadata,
+} from "@/lib/media/storage/types";
 import { MAX_REQUEST_BYTES, listMedia, saveMediaUpload } from "@/lib/media/store";
 
 const UPLOAD_CUSTOM_HEADER = "x-vanka-request";
+
+/** Valid upload pools. Each upload must land in exactly one. */
+const MEDIA_COLLECTIONS: ReadonlySet<string> = new Set(["birthday", "archive"]);
+
+/** Mirrors the PATCH metadata limits so upload and edit agree. */
+const TITLE_MAX = 200;
+const DESCRIPTION_MAX = 5000;
+
+/**
+ * Read and trim the optional upload-time metadata. Empty/whitespace values
+ * become `null`; an overlong value fails closed (422), never truncated.
+ * Returns `undefined` when NO field was supplied, so callers with no metadata
+ * keep the exact 3-argument upload signature.
+ */
+function parseUploadMetadata(
+  titleRaw: unknown,
+  descriptionRaw: unknown,
+): MediaUploadMetadata | undefined {
+  const title = typeof titleRaw === "string" && titleRaw.trim() !== "" ? titleRaw.trim() : null;
+  const description =
+    typeof descriptionRaw === "string" && descriptionRaw.trim() !== ""
+      ? descriptionRaw.trim()
+      : null;
+
+  if (title !== null && title.length > TITLE_MAX) {
+    throw new ApiError(422, "TITLE_TOO_LONG", `Judul maksimal ${TITLE_MAX} karakter.`);
+  }
+  if (description !== null && description.length > DESCRIPTION_MAX) {
+    throw new ApiError(422, "DESCRIPTION_TOO_LONG", `Keterangan maksimal ${DESCRIPTION_MAX} karakter.`);
+  }
+
+  return title === null && description === null ? undefined : { title, description };
+}
+
+/**
+ * Validate the client-declared collection pool. Missing/empty -> the default
+ * (`birthday`); any other value is rejected (never silently coerced).
+ */
+function parseCollection(raw: string | null): MediaCollection {
+  if (raw === null || raw.trim() === "") return "birthday";
+  if (MEDIA_COLLECTIONS.has(raw)) return raw as MediaCollection;
+  throw new ApiError(422, "INVALID_COLLECTION", "Koleksi media tidak dikenal.");
+}
 
 /**
  * CSRF/origin protection for the multipart upload endpoint.
@@ -87,7 +134,13 @@ export async function POST(request: Request): Promise<Response> {
       return jsonError(422, "NO_FILE", "Tidak ada file yang dikirim.");
     }
 
-    const record = await saveMediaUpload(admin, file);
+    const rawCollection = form.get("collection");
+    const collection = parseCollection(typeof rawCollection === "string" ? rawCollection : null);
+    const metadata = parseUploadMetadata(form.get("title"), form.get("description"));
+    const record =
+      metadata === undefined
+        ? await saveMediaUpload(admin, file, collection)
+        : await saveMediaUpload(admin, file, collection, metadata);
     return jsonOk(record, { status: 201 });
   } catch (error) {
     if (error instanceof ApiError) return error.toResponse();

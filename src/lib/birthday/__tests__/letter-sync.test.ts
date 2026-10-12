@@ -165,6 +165,11 @@ describe("saveLetter", () => {
     expect((await saveLetter(locked.fetcher, 1, draft())).status).toBe("locked");
   });
 
+  it("maps LETTER_PUBLISHED (409) to the frozen state", async () => {
+    const frozen = fakeFetcher([{ status: 409, body: { error: { code: "LETTER_PUBLISHED" } } }]);
+    expect((await saveLetter(frozen.fetcher, 1, draft())).status).toBe("published");
+  });
+
   it("maps 422 to validation with the server message", async () => {
     const { fetcher } = fakeFetcher([
       { status: 422, body: { error: { code: "VALIDATION_ERROR", message: "Input tidak valid." } } },
@@ -330,10 +335,18 @@ describe("honest messaging", () => {
       { status: "unavailable" },
       { status: "unauthorized" },
       { status: "locked" },
+      { status: "published" },
       { status: "validation", message: "x" },
     ] as const) {
       expect(saveOutcomeMessage(outcome as never, 1).type).toBe("error");
     }
+  });
+
+  it("explains the freeze for a published edition", () => {
+    const msg = saveOutcomeMessage({ status: "published" }, 1);
+    expect(msg.type).toBe("error");
+    expect(msg.message.toLowerCase()).toContain("dibekukan");
+    expect(msg.message.toLowerCase()).toContain("tidak dikirim");
   });
 
   it("never claims server persistence when unavailable", () => {

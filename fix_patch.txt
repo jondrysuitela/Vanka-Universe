@@ -1,0 +1,18 @@
+      // `full=1` → load the edited letter draft but let the experience run from
+      // its very beginning (gift-box intro → scene 0 opening → letter → box).
+      // `letter=1` → open the (edited) letter draft straight away.
+      // A bare `preview=1` ALSO loads the draft: an admin preview must show the
+      // edited letter + chosen opening thumbnail, never the bundled default.
+      // `age=N` (1–17) selects which edition's letter to preview; defaults to 1.
+      const useDraft = preview || params.get("full") === "1" || params.get("letter") === "1";
+      if (useDraft) {
+        const ageRaw = Number(params.get("age") ?? "1");
+        const age = Number.isInteger(ageRaw) && ageRaw >= 1 && ageRaw <= 17 ? ageRaw : 1;
+        const stored = loadLetterForAge(age);
+        setLetterDraft(stored ?? EMPTY_LETTER_DRAFT);
+        setLetterPreview(true);
+        if (params.get("letter") === "1") {
+          setRevealed(true);
+          setActive(LETTER_SCENE_INDEX);
+        }
+      }
