@@ -85,9 +85,27 @@ export default function ArsipIbuPage() {
       {phase === "locked" && <IPhonePinOverlay onUnlocked={openArchive} notice={notice} />}
 
       {phase === "unlocked" && (
-        <ArchiveVisitorExperience
-          onSessionEnded={() => endSession(ARCHIVE_VISITOR_MESSAGES.sessionEnded)}
-        />
+        <div className="space-y-4">
+          <ArchiveVisitorExperience
+            onSessionEnded={() => endSession(ARCHIVE_VISITOR_MESSAGES.sessionEnded)}
+          />
+          <div className="flex justify-center">
+            <button
+              onClick={async () => {
+                try {
+                  await fetch("/api/archive/access/logout", {
+                    method: "POST",
+                    headers: { "x-vanka-request": "1" },
+                  });
+                } catch {}
+                endSession("Arsip terkunci.");
+              }}
+              className="rounded-lg border border-white/15 px-4 py-2 text-sm text-white/70 hover:text-white/90"
+            >
+              Kunci Arsip
+            </button>
+          </div>
+        </div>
       )}
     </ArchiveShell>
   );
