@@ -223,13 +223,16 @@ SELECT column_name, data_type, character_maximum_length, is_nullable, column_def
 |---|---|---|---|---|
 | id | uuid | NULL | NO | uuid_generate_v4() |
 | email | character varying | 255 | NO | NULL |
-| ip_address | character varying | 100 | NO | NULL |
+| ip_address | character varying | 100 | **YES** | NULL |
 | success | boolean | NULL | NO | false |
 | attempted_at | timestamp with time zone | NULL | NO | now() |
 
 **Failure modes:**
 - Table does not exist (zero rows): `CREATE TABLE` failed.
 - Columns missing or types wrong: queries in `rate-limit.ts` will fail or return wrong data.
+- `ip_address.is_nullable` is `NO`: the identity-only bucket (`ip_address IS NULL`) cannot be
+  written, so a login attempt from an untrusted/unknown client IP would fail with a NOT NULL
+  violation and the rate limiter would never record that attempt.
 
 ---
 
@@ -245,11 +248,14 @@ SELECT indexname, indexdef
 
 **Expected indexes:**
 1. `idx_login_attempts_email_ip_time`: `CREATE INDEX idx_login_attempts_email_ip_time ON public.login_attempts USING btree (email, ip_address, attempted_at DESC)`
-2. `idx_login_attempts_ip_time`: `CREATE INDEX idx_login_attempts_ip_time ON public.login_attempts USING btree (ip_address, attempted_at DESC)`
+2. `idx_login_attempts_email_null_ip_time`: `CREATE INDEX idx_login_attempts_email_null_ip_time ON public.login_attempts USING btree (email, attempted_at DESC) WHERE (ip_address IS NULL)`
+3. `idx_login_attempts_ip_time`: `CREATE INDEX idx_login_attempts_ip_time ON public.login_attempts USING btree (ip_address, attempted_at DESC)`
 
 **Failure modes:**
 - Indexes missing: rate-limit queries degrade to seq scans; high concurrency risk.
 - Column order wrong: index not used; queries slow.
+- `idx_login_attempts_email_null_ip_time` missing: the identity-only bucket query degrades to a
+  seq scan; correctness is unaffected.
 
 ---
 

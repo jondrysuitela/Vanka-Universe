@@ -8,6 +8,7 @@ vi.mock("@/lib/db", () => ({
 
 import { GET as accessGet, POST as accessPost } from "@/app/api/archive/access/route";
 import { POST as logoutPost } from "@/app/api/archive/access/logout/route";
+import { POST as lockPost } from "@/app/api/archive/access/lock/route";
 import { hashPin } from "@/lib/archive/access/pin";
 import {
   ARCHIVE_ACCESS_COOKIE_NAME,
@@ -362,6 +363,94 @@ describe("POST /api/archive/access/logout", () => {
       new Request(`${BASE}/api/archive/access/logout`, {
         method: "POST",
         headers: mutationHeaders(VISITOR_COOKIE),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(cookies(res).get(ARCHIVE_ACCESS_COOKIE_NAME)?.maxAge).toBe(0);
+  });
+});
+
+describe("POST /api/archive/access/lock (beacon-only, no custom header)", () => {
+  /** Beacon headers: origin + JSON content type, but NO `x-vanka-request`. */
+  function beaconHeaders(cookie?: string): Headers {
+    const headers = new Headers();
+    headers.set("origin", BASE);
+    headers.set("content-type", "application/json");
+    if (cookie) headers.set("cookie", cookie);
+    return headers;
+  }
+
+  it("revokes the visitor session and clears the cookie WITHOUT the custom header", async () => {
+    setup(fake);
+    const res = await lockPost(
+      new Request(`${BASE}/api/archive/access/lock`, {
+        method: "POST",
+        headers: beaconHeaders(VISITOR_COOKIE),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect((await json(res)).data).toEqual({ unlocked: false });
+    expect(cookies(res).get(ARCHIVE_ACCESS_COOKIE_NAME)?.maxAge).toBe(0);
+    expect(
+      fake.query.mock.calls.some(([sql]) =>
+        String(sql).includes("UPDATE archive_access_sessions SET revoked_at"),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects a cross-origin beacon", async () => {
+    setup(fake);
+    const headers = beaconHeaders(VISITOR_COOKIE);
+    headers.set("origin", "https://evil.example");
+    const res = await lockPost(
+      new Request(`${BASE}/api/archive/access/lock`, {
+        method: "POST",
+        headers,
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(errorCode(await json(res))).toBe("ORIGIN_REJECTED");
+    expect(fake.query).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-JSON content type (an HTML form cannot produce it)", async () => {
+    setup(fake);
+    const headers = beaconHeaders(VISITOR_COOKIE);
+    headers.set("content-type", "application/x-www-form-urlencoded");
+    const res = await lockPost(
+      new Request(`${BASE}/api/archive/access/lock`, {
+        method: "POST",
+        headers,
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(errorCode(await json(res))).toBe("CONTENT_TYPE_REJECTED");
+    expect(fake.query).not.toHaveBeenCalled();
+  });
+
+  it("still clears the cookie when the access schema is unavailable", async () => {
+    fake.when("UPDATE archive_access_sessions SET revoked_at", () => undefinedTable());
+    const res = await lockPost(
+      new Request(`${BASE}/api/archive/access/lock`, {
+        method: "POST",
+        headers: beaconHeaders(VISITOR_COOKIE),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(cookies(res).get(ARCHIVE_ACCESS_COOKIE_NAME)?.maxAge).toBe(0);
+  });
+
+  it("still clears the cookie when the revoke fails with a generic database error", async () => {
+    // Fail-closed: a revoke that cannot be confirmed (any DB failure, not just
+    // a missing schema) must still clear the visitor cookie. A stale cookie
+    // would leave the archive unlocked.
+    fake.when("UPDATE archive_access_sessions SET revoked_at", () => {
+      throw new Error("connection terminated unexpectedly");
+    });
+    const res = await lockPost(
+      new Request(`${BASE}/api/archive/access/lock`, {
+        method: "POST",
+        headers: beaconHeaders(VISITOR_COOKIE),
       }),
     );
     expect(res.status).toBe(200);

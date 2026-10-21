@@ -7,6 +7,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import LetterScene, { type LetterDraft, type LetterThumbnail } from "./LetterScene";
 import type { GalleryItem } from "@/lib/birthday/gallery/client-sync";
+import { mediaUrlFor } from "@/lib/birthday/experience-media";
 
 /**
  * Experience flow:
@@ -75,7 +76,7 @@ const PLACEHOLDER_ITEM: GalleryItem = {
 
 /** Public byte URL for one revealed gallery item. */
 export function galleryMediaUrl(id: string): string {
-  return `/api/birthday/gallery/media/${id}`;
+  return mediaUrlFor("public", id);
 }
 
 /** Caption shown under a frame: the admin title, else the file name. */

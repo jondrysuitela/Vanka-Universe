@@ -14,25 +14,50 @@ export const MAX_FAILURES_PER_IP = 20;
  *    (anti-spray across many emails).
  *
  * The thresholds and window are configurable constants above.
+ *
+ * UNKNOWN IP (no trustworthy client identity): the IP-scoped guards are SKIPPED
+ * and the attempt is counted in an IDENTITY-ONLY bucket (`ip_address IS NULL`),
+ * keyed by the email. This is deliberate and mirrors `isReauthLocked`:
+ *
+ *  - A shared "empty IP" bucket (every unknown-IP client in one row space) would
+ *    let ONE client fill the counter and lock the account for everybody.
+ *  - Skipping the guards entirely would leave guessing uncapped.
+ *
+ * The identity-only bucket is therefore per-EMAIL: one client's failures can
+ * only ever lock that one identity, never another one.
  */
 export async function isLoginLocked(email: string, ip: string | null): Promise<boolean> {
   if (!email) return false;
   const pool = getPool();
-  const normalizedIp = ip ?? "";
+
+  if (!ip) {
+    // No trustworthy client IP: count only THIS identity's failures recorded
+    // without an IP. The per-IP anti-spray guard is skipped on purpose — there
+    // is no IP to scope it to.
+    const identity = await pool.query<{ n: number }>(
+      `SELECT count(*)::int AS n
+         FROM login_attempts
+        WHERE email = $1 AND ip_address IS NULL AND success = false
+          AND attempted_at > now() - interval '15 minutes'`,
+      [email],
+    );
+    return (identity.rows[0]?.n ?? 0) >= MAX_FAILURES_PER_EMAIL_IP;
+  }
+
   const [emailIp, ipWide] = await Promise.all([
     pool.query<{ n: number }>(
       `SELECT count(*)::int AS n
          FROM login_attempts
         WHERE email = $1 AND ip_address = $2 AND success = false
           AND attempted_at > now() - interval '15 minutes'`,
-      [email, normalizedIp],
+      [email, ip],
     ),
     pool.query<{ n: number }>(
       `SELECT count(*)::int AS n
          FROM login_attempts
         WHERE ip_address = $1 AND success = false
           AND attempted_at > now() - interval '15 minutes'`,
-      [normalizedIp],
+      [ip],
     ),
   ]);
   if ((emailIp.rows[0]?.n ?? 0) >= MAX_FAILURES_PER_EMAIL_IP) return true;
@@ -43,6 +68,10 @@ export async function isLoginLocked(email: string, ip: string | null): Promise<b
 /**
  * Record one login attempt. On success, clears past failure rows for that
  * email+IP so the counter resets; a success row is still appended.
+ *
+ * An unknown client IP is stored as NULL (`ip_address IS NULL`), which is the
+ * identity-only bucket described above. It is NEVER stored as an empty string:
+ * that would silently merge every unknown-IP client into one shared bucket.
  */
 export async function recordLoginAttempt(
   email: string,
@@ -50,12 +79,19 @@ export async function recordLoginAttempt(
   success: boolean,
 ): Promise<void> {
   const pool = getPool();
-  const normalizedIp = ip ?? "";
+  const normalizedIp = ip ?? null;
   if (success) {
-    await pool.query(
-      `DELETE FROM login_attempts WHERE email = $1 AND ip_address = $2 AND success = false`,
-      [email, normalizedIp],
-    );
+    if (normalizedIp === null) {
+      await pool.query(
+        `DELETE FROM login_attempts WHERE email = $1 AND ip_address IS NULL AND success = false`,
+        [email],
+      );
+    } else {
+      await pool.query(
+        `DELETE FROM login_attempts WHERE email = $1 AND ip_address = $2 AND success = false`,
+        [email, normalizedIp],
+      );
+    }
   }
   await pool.query(
     `INSERT INTO login_attempts (email, ip_address, success) VALUES ($1, $2, $3)`,

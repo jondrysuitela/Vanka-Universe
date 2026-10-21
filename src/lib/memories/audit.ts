@@ -1,4 +1,5 @@
 import { getPool } from "@/lib/db";
+import { resolveClientIp } from "@/lib/archive/access/request";
 
 /**
  * Append-only audit writer untuk Memories.
@@ -27,10 +28,21 @@ export interface AuditEntry<T> {
   diff?: T;
 }
 
+/**
+ * Client info recorded in the audit trail.
+ *
+ * The IP is resolved ONLY from a header the operator declared trustworthy
+ * (`ARCHIVE_TRUSTED_PROXY_HEADER`). A raw `x-forwarded-for` is
+ * client-controllable unless a proxy overwrites it, so storing it verbatim
+ * would let a client write an arbitrary "IP" into the audit log — the log
+ * would then record a false origin.
+ *
+ * With no trusted header the IP is UNKNOWN (null): the audit row says "unknown",
+ * which is honest. The audit trail is a record, not a security control, so this
+ * never blocks the operation.
+ */
 export function requestClientInfo(request: Request): { ipAddress: string | null; userAgent: string | null } {
-  const forwarded = request.headers.get("x-forwarded-for");
-  const ipAddress = forwarded ? forwarded.split(",")[0].trim() || null : null;
-  return { ipAddress, userAgent: request.headers.get("user-agent") };
+  return { ipAddress: resolveClientIp(request), userAgent: request.headers.get("user-agent") };
 }
 
 export async function writeAuditLog<T>(entry: AuditEntry<T>): Promise<void> {

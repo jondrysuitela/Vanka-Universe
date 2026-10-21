@@ -17,6 +17,17 @@ import { ARCHIVE_VISITOR_MESSAGES } from "@/lib/archive/visitor";
  *
  * Fail-closed: any check failure (network error, 503, malformed body) falls back
  * to the PIN gate, never to the experience.
+ *
+ * AUTO-LOCK: leaving the route ends the visitor session. Three mechanisms cover
+ * the ways a page can be left:
+ *  - `pagehide` + `sendBeacon` — a full page unload (refresh, tab close,
+ *    external navigation). A beacon survives the unload; a plain fetch would be
+ *    cancelled by the browser.
+ *  - `beforeunload` — the same case, additionally asking the browser to warn
+ *    the visitor that the archive will lock.
+ *  - the unmount cleanup — a client-side navigation (Next.js `router.push`,
+ *    a `<Link>`), where the page component is unmounted.
+ * All of them revoke the session server-side, so the PIN must be entered again.
  */
 
 type Phase = "checking" | "locked" | "unlocked";
@@ -57,20 +68,75 @@ export default function ArsipIbuPage() {
     setPhase("locked");
   }, []);
 
-  // Auto-logout when user leaves page
+  // Leaving the route locks the archive again (server-side session revoked).
   useEffect(() => {
-    return () => {
-      // Component unmounting = user left /arsip-ibu
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Modern browsers show their own generic message; the return value is
+      // ignored by most of them, but the call is still required to trigger it.
+      event.returnValue = "Arsip akan terkunci otomatis. Lanjutkan?";
+      return "Arsip akan terkunci otomatis. Lanjutkan?";
+    };
+
+    /**
+     * Revoke the visitor session.
+     *
+     * `sendBeacon` is the primary mechanism: it survives the page going away,
+     * which is exactly what happens on a refresh/tab close — a normal `fetch`
+     * is cancelled by the browser in that case. It cannot set custom headers,
+     * hence the dedicated `/api/archive/access/lock` route (see that route for
+     * why dropping the custom header is safe there).
+     *
+     * The `fetch` fallback carries the FULL safe-mutation headers
+     * (`content-type: application/json` + `x-vanka-request: 1`); without the
+     * content type the server rejects the request with 403 and the session
+     * would NOT be revoked.
+     */
+    const lockArchive = () => {
+      try {
+        if (typeof navigator.sendBeacon === "function") {
+          navigator.sendBeacon(
+            "/api/archive/access/lock",
+            new Blob(["{}"], { type: "application/json" }),
+          );
+          return;
+        }
+      } catch {
+        // Beacon blocked (e.g. by an extension): fall through to fetch.
+      }
       void (async () => {
         try {
           await fetch("/api/archive/access/logout", {
             method: "POST",
-            headers: { "x-vanka-request": "1" },
+            headers: {
+              "content-type": "application/json",
+              "x-vanka-request": "1",
+            },
+            body: "{}",
           });
         } catch {
-          // Ignore logout errors
+          // The cookie is cleared on the next load check regardless.
         }
       })();
+    };
+
+    /**
+     * `pagehide` fires on unload AND when the page enters the back/forward
+     * cache. A cached page that is restored is still "on the archive", so it
+     * must NOT be locked: only a real departure does that.
+     */
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (event.persisted) return;
+      lockArchive();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pagehide", handlePageHide);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pagehide", handlePageHide);
+      // Unmount = the visitor navigated away (client-side navigation).
+      lockArchive();
     };
   }, []);
 
@@ -85,27 +151,9 @@ export default function ArsipIbuPage() {
       {phase === "locked" && <IPhonePinOverlay onUnlocked={openArchive} notice={notice} />}
 
       {phase === "unlocked" && (
-        <div className="space-y-4">
-          <ArchiveVisitorExperience
-            onSessionEnded={() => endSession(ARCHIVE_VISITOR_MESSAGES.sessionEnded)}
-          />
-          <div className="flex justify-center">
-            <button
-              onClick={async () => {
-                try {
-                  await fetch("/api/archive/access/logout", {
-                    method: "POST",
-                    headers: { "x-vanka-request": "1" },
-                  });
-                } catch {}
-                endSession("Arsip terkunci.");
-              }}
-              className="rounded-lg border border-white/15 px-4 py-2 text-sm text-white/70 hover:text-white/90"
-            >
-              Kunci Arsip
-            </button>
-          </div>
-        </div>
+        <ArchiveVisitorExperience
+          onSessionEnded={() => endSession(ARCHIVE_VISITOR_MESSAGES.sessionEnded)}
+        />
       )}
     </ArchiveShell>
   );

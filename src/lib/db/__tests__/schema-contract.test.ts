@@ -189,6 +189,20 @@ describe("draft auth migration contract (db/draft_migration_4c2a_auth_foundation
     );
   });
 
+  it("login_attempts.ip_address is NULLABLE so an untrusted client IP can be recorded", () => {
+    // The identity-only rate-limit bucket stores `ip_address IS NULL`. With a
+    // NOT NULL column the INSERT would fail for every login from a client whose
+    // IP cannot be trusted, and the attempt would never be counted.
+    const block = tableBlock(draft, "login_attempts");
+    expect(block).toMatch(/ip_address\s+VARCHAR\(100\)\s*,/);
+    expect(block).not.toMatch(/ip_address\s+VARCHAR\(100\)\s+NOT\s+NULL/);
+  });
+
+  it("login_attempts indexes the identity-only bucket", () => {
+    expect(draft).toContain("idx_login_attempts_email_null_ip_time");
+    expect(draft).toContain("WHERE ip_address IS NULL");
+  });
+
   it("wraps DDL in a single transaction", () => {
     expect(draft.trimStart().startsWith("--")).toBe(true);
     expect(draft).toContain("\nBEGIN;");

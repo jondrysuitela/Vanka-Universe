@@ -66,4 +66,27 @@ describe("/arsip-ibu page", () => {
     expect(screen.getByRole("status").textContent).toBe(ARCHIVE_VISITOR_MESSAGES.sessionEnded);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Arsip Ibu");
   });
+
+  it("locks the archive when the page is left, with the headers the API demands", async () => {
+    // Leaving the route must revoke the visitor session server-side. The
+    // request MUST carry `content-type: application/json`, otherwise the safe
+    // -mutation guard rejects it with 403 and the session stays alive.
+    const { calls } = installFetchMock((url) => {
+      if (url === "/api/archive/access") return { status: 200, body: { data: { unlocked: true } } };
+      if (url === "/api/archive/experience") return { status: 200, body: { data: FULL } };
+      return { status: 404 };
+    });
+    const view = render(<ArsipIbuPage />);
+    await screen.findByRole("heading", { level: 1, name: "Tentang Ibumu" });
+
+    view.unmount();
+
+    const lock = calls.find((call) =>
+      /\/api\/archive\/access\/(lock|logout)$/.test(call.url),
+    );
+    expect(lock, "no lock request was sent when leaving the page").toBeDefined();
+    const headers = (lock?.init?.headers ?? {}) as Record<string, string>;
+    expect(headers["content-type"]).toContain("application/json");
+    expect(headers["x-vanka-request"]).toBe("1");
+  });
 });

@@ -3,7 +3,7 @@
  * Apply the Vanka Universe schema chain to a PostgreSQL / Neon database.
  *
  * The project has no migration system: the schema is a fixed, ordered list of
- * SQL files (see docs/cloudflare-deploy.md). This runner exists because plain
+ * SQL files (see docs/deploy.md). This runner exists because plain
  * `psql` is not always available (e.g. on this Windows machine) and because
  * every draft file must run in exactly one transaction.
  *

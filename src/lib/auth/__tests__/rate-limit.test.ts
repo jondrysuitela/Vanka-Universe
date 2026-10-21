@@ -50,6 +50,26 @@ describe("isLoginLocked", () => {
     fake.when("SELECT count(*)", countHandler(MAX_FAILURES_PER_EMAIL_IP - 1, 0));
     await expect(isLoginLocked("a@vanka.universe", "1.2.3.4")).resolves.toBe(false);
   });
+
+  it("uses a per-email identity bucket when the client IP is unknown", async () => {
+    // No trustworthy IP => the per-IP guards are skipped and the attempt is
+    // counted in a bucket keyed by THIS email only. A shared empty-IP bucket
+    // would let one client lock every account.
+    fake.when("SELECT count(*)", (sql: string, params: unknown[] | undefined) => {
+      expect(String(sql)).toContain("ip_address IS NULL");
+      expect((params as unknown[])[0]).toBe("a@vanka.universe");
+      return { rows: [{ n: 0 }], rowCount: 1 };
+    });
+    await expect(isLoginLocked("a@vanka.universe", null)).resolves.toBe(false);
+  });
+
+  it("locks via the identity bucket once it reaches the threshold", async () => {
+    fake.when("SELECT count(*)", (sql: string) => {
+      expect(String(sql)).toContain("ip_address IS NULL");
+      return { rows: [{ n: MAX_FAILURES_PER_EMAIL_IP }], rowCount: 1 };
+    });
+    await expect(isLoginLocked("a@vanka.universe", null)).resolves.toBe(true);
+  });
 });
 
 describe("recordLoginAttempt", () => {
@@ -73,6 +93,21 @@ describe("recordLoginAttempt", () => {
     await recordLoginAttempt("a@vanka.universe", "1.2.3.4", false);
     const call = fake.query.mock.calls.find(([sql]) => String(sql).startsWith("INSERT INTO login_attempts"));
     expect(call).toBeDefined();
+  });
+
+  it("stores an unknown client IP as NULL, never as an empty string", async () => {
+    // An empty string would merge every unknown-IP client into ONE shared
+    // bucket, so a single client could lock the account for everybody.
+    const seen: Array<unknown[]> = [];
+    fake.when("INSERT INTO login_attempts", (_sql, params) => {
+      seen.push(params as unknown[]);
+      return { rows: [], rowCount: 1 };
+    });
+    fake.when("DELETE FROM login_attempts", () => ({ rows: [], rowCount: 0 }));
+
+    await recordLoginAttempt("a@vanka.universe", null, false);
+
+    expect(seen[0][1]).toBeNull();
   });
 });
 

@@ -100,16 +100,27 @@ Indeks (draft:76-88): `idx_sessions_admin` (penuh), `idx_sessions_admin_active` 
 
 | Kolom | Tipe (draft:119-125) | Dipakai kode | Bukti |
 |---|---|---|---|
-| `email` | `varchar(255) NOT NULL` | ya | `rate-limit.ts:26,56,61` |
-| `ip_address` | `varchar(100) NOT NULL` | ya (`null` → `""`) | `rate-limit.ts:21,27,33,57,62` |
-| `success` | `boolean NOT NULL DEFAULT false` | ya | `rate-limit.ts:26,33,56,61` |
-| `attempted_at` | `timestamptz NOT NULL DEFAULT now()` | ya | `rate-limit.ts:27,34` |
+| `email` | `varchar(255) NOT NULL` | ya | `rate-limit.ts` |
+| `ip_address` | `varchar(100)` (**nullable**) | ya (`null` = IP tidak dipercaya) | `rate-limit.ts` |
+| `success` | `boolean NOT NULL DEFAULT false` | ya | `rate-limit.ts` |
+| `attempted_at` | `timestamptz NOT NULL DEFAULT now()` | ya | `rate-limit.ts` |
 
-Aturan **[FAKTA]**: 5 kegagalan per email+IP / 20 kegagalan per IP dalam 15 menit → 429 (`guard`-level, `rate-limit.ts:3-5,38-40`). Login sukses menghapus baris gagal email+IP lalu menambah baris sukses (`rate-limit.ts:54-63`).
+Aturan **[FAKTA]**: 5 kegagalan per email+IP / 20 kegagalan per IP dalam 15 menit → 429. Bila IP
+klien tidak dapat dipercaya (tidak ada `ARCHIVE_TRUSTED_PROXY_HEADER` yang dikonfigurasi),
+guard per-IP dilewati dan kegagalan dihitung pada bucket **identity-only per email**
+(`ip_address IS NULL`), sehingga tebakan tetap dibatasi tanpa satu klien mengunci akun orang lain.
+Login sukses menghapus baris gagal (email+IP, atau bucket identity-only bila IP tak dikenal) lalu
+menambah baris sukses.
 
-Indeks (draft:131-136): `idx_login_attempts_email_ip_time(email, ip_address, attempted_at DESC)`, `idx_login_attempts_ip_time(ip_address, attempted_at DESC)`.
+Indeks: `idx_login_attempts_email_ip_time(email, ip_address, attempted_at DESC)`,
+`idx_login_attempts_email_null_ip_time(email, attempted_at DESC) WHERE ip_address IS NULL`,
+`idx_login_attempts_ip_time(ip_address, attempted_at DESC)`.
 
-**[FAKTA] Kesimpulan konsistensi:** tipe, nullability, constraint, FK, dan indeks di draft migration **cocok** dengan query `session.ts`, `rate-limit.ts`, dan `login/route.ts`. Tidak ditemukan ketidakcocokan tipe/kolom.
+**[PERBAIKAN]** Kolom `ip_address` sebelumnya dideklarasikan `NOT NULL` sementara kode menyimpan
+`""` untuk IP tak dikenal. Itu menggabungkan semua klien tanpa IP tepercaya ke satu bucket
+bersama — satu klien bisa mengunci login seluruh orang. Kolom kini nullable dan kode menyimpan
+`NULL` (bucket identity-only per email). Sumber IP: hanya header yang dinyatakan operator lewat
+`ARCHIVE_TRUSTED_PROXY_HEADER`; `x-forwarded-for` mentah tidak lagi dipakai.
 
 **[FAKTA] Cacat dokumentasi (bukan kode):** sebelumnya `db/SCHEMA.md` **belum** memuat `sessions`, `login_attempts`, atau `admins.password_hash`. **Diselaraskan pada Tahap 4G.17**: `db/SCHEMA.md` kini mendokumentasikan ketiganya beserta constraint/indeks/FK, perilaku expiry & revokasi, serta koreksi klaim indeks `audit_logs` yang salah. SQL/migration **tidak** diubah.
 

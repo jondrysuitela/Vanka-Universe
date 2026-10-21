@@ -5,6 +5,7 @@ import { ApiError, assertSafeMutation, jsonError, jsonOk } from "@/lib/auth/guar
 import { burnDummyComparison, verifyPassword } from "@/lib/auth/password";
 import { createSession, setSessionCookie } from "@/lib/auth/session";
 import { isLoginLocked, recordLoginAttempt } from "@/lib/auth/rate-limit";
+import { resolveClientIp } from "@/lib/archive/access/request";
 
 // Note: Next.js 16 defaults route handlers to the Node.js runtime. The
 // `runtime` segment config is intentionally NOT declared here because it is
@@ -33,10 +34,20 @@ async function findAdminByEmail(email: string): Promise<AdminRow | null> {
   return result.rows[0] ?? null;
 }
 
+/**
+ * Client IP for the login rate limiter.
+ *
+ * Only a header the OPERATOR declared trustworthy (`ARCHIVE_TRUSTED_PROXY_HEADER`)
+ * is read. A raw `x-forwarded-for` is client-controllable unless a proxy strips
+ * it, so trusting it blindly would let an attacker forge a fresh identity per
+ * attempt and defeat the lockout entirely.
+ *
+ * With no trusted header the IP is UNKNOWN (null); the limiter then falls back
+ * to an identity-only bucket keyed by the email (see `rate-limit.ts`), which
+ * still caps guessing without ever locking another account.
+ */
 function requestIp(request: Request): string | null {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim() || null;
-  return null;
+  return resolveClientIp(request);
 }
 
 async function touchLastLogin(adminId: string): Promise<void> {

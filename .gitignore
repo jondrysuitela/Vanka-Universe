@@ -17,6 +17,11 @@
 /.next/
 /out/
 
+# cloudflare workers / opennext build artifacts (sudah tidak dipakai sejak
+# migrasi ke Vercel, tapi artefaknya masih ada di working tree)
+/.open-next/
+/.wrangler/
+
 # local private media storage (never commit user files)
 /storage/
 

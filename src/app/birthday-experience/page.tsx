@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ExperienceScene, {
   LETTER_SCENE_INDEX,
@@ -13,7 +13,40 @@ import {
   loadLetterForAge,
   type LetterDraft,
 } from "@/components/birthday/LetterScene";
+import { resolveExperienceParams } from "@/lib/birthday/experience-params";
+import {
+  mediaUrlFor,
+  resolveMediaRoute,
+  type ExperienceMediaRoute,
+} from "@/lib/birthday/experience-media";
+import {
+  loadBirthdayGallery,
+  type GalleryItem,
+} from "@/lib/birthday/gallery/client-sync";
+import { loadPublicExperience } from "@/lib/birthday/public-experience";
 
+/**
+ * Public birthday experience.
+ *
+ * CONTENT SOURCE — two modes, never mixed up. The decision is made by ONE
+ * pure, unit-tested function (`resolveExperienceParams`), not re-derived here:
+ *
+ *  1. DRAFT (admin): `preview=1` / `full=1` / `letter=1` — reads the
+ *     BROWSER-LOCAL draft (`localStorage`) so the editor sees exactly what it
+ *     typed, including edits that were never saved to the server. The server's
+ *     published letter is deliberately NOT used here: an admin must see their
+ *     own unsaved edits.
+ *
+ *  2. SERVER (public visitor): no draft flags — reads the PUBLIC, date-gated
+ *     API (`GET /api/birthday/letter` and `GET /api/birthday/gallery`). These
+ *     only answer from the reveal instant (the birthday itself) onwards, so
+ *     nothing leaks early.
+ *
+ *     When the server letter cannot be read (the gate is still closed, or the
+ *     server is unreachable) the bundled default letter is shown instead — the
+ *     author's own text, shipped with the app. It is never an empty screen and
+ *     never invented filler.
+ */
 export default function BirthdayExperiencePage() {
   const [ready, setReady] = useState(false);
   const [active, setActive] = useState(0);
@@ -21,25 +54,74 @@ export default function BirthdayExperiencePage() {
   const [revealed, setRevealed] = useState(false);
   const [letterDraft, setLetterDraft] = useState<LetterDraft>(DEFAULT_LETTER_DRAFT);
   const [letterPreview, setLetterPreview] = useState(false);
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
+  /**
+   * Which byte route the gallery must use.
+   *
+   * Public: the date-gated public route (only revealed media).
+   * Admin preview: the private admin route, which needs the session cookie and
+   * is NOT date-gated — the admin must see the media before the birthday.
+   *
+   * The route is a plain STRING in state, never the builder itself: a function
+   * held in state is easy to set with the updater form by mistake
+   * (`setMediaSrc((id) => ...)`), which would store the builder's RETURN value
+   * instead of the builder. The decision itself lives in the pure, unit-tested
+   * `resolveMediaRoute` / `mediaUrlFor`.
+   */
+  const [mediaRoute, setMediaRoute] = useState<ExperienceMediaRoute>("public");
+  const mediaSrc = useMemo(
+    () => (id: string) => mediaUrlFor(mediaRoute, id),
+    [mediaRoute],
+  );
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      const params = new URLSearchParams(window.location.search);
-      setFromAdmin(params.get("preview") === "1");
+      const plan = resolveExperienceParams(window.location.search);
+      setFromAdmin(plan.fromAdmin);
 
-      // `letter=1` → open the (edited) letter draft straight away.
-      // `age=N` (1–17) selects which edition's letter to preview; defaults to 1.
-      if (params.get("letter") === "1") {
-        const ageRaw = Number(params.get("age") ?? "1");
-        const age = Number.isInteger(ageRaw) && ageRaw >= 1 && ageRaw <= 17 ? ageRaw : 1;
-        const stored = loadLetterForAge(age);
+      if (plan.useDraft) {
+        // Admin preview: read the browser-local draft of the chosen edition.
+        const stored = loadLetterForAge(plan.age);
         setLetterDraft(stored ?? EMPTY_LETTER_DRAFT);
         setLetterPreview(true);
-        setRevealed(true);
-        setActive(LETTER_SCENE_INDEX);
+        // The preview bypasses the date gate, but it still needs the ADMIN
+        // media route: the public one only serves already-revealed media.
+        setMediaRoute(resolveMediaRoute(true));
+
+        void (async () => {
+          try {
+            const gallery = await loadBirthdayGallery(
+              (input, init) => fetch(input, init),
+              true,
+            );
+            if (gallery.status === "ok") setGalleryItems(gallery.data.items);
+          } catch {
+            // The loader never throws; the gallery keeps its honest placeholder.
+          }
+        })();
+
+        if (plan.openLetter) {
+          setRevealed(true);
+          setActive(LETTER_SCENE_INDEX);
+        }
+        setReady(true);
+        return;
       }
 
-      setReady(true);
+      // Public: load the revealed letter + gallery from the server.
+      void (async () => {
+        try {
+          const experience = await loadPublicExperience((input, init) => fetch(input, init));
+          if (experience.letterDraft) {
+            setLetterDraft(experience.letterDraft);
+          }
+          setGalleryItems(experience.galleryItems);
+        } catch {
+          // The loader never throws; this is a belt-and-braces guard. The
+          // bundled default letter and the honest placeholder stay in place.
+        }
+        setReady(true);
+      })();
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -82,6 +164,8 @@ export default function BirthdayExperiencePage() {
             letterDraft={letterDraft}
             letterPreview={letterPreview}
             thumbnail={letterDraft.thumbnail}
+            galleryItems={galleryItems}
+            mediaSrc={mediaSrc}
           />
         ) : (
           <GiftBoxIntro onOpen={() => setRevealed(true)} />

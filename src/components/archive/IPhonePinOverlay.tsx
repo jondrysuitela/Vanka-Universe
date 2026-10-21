@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 
 const PIN_LENGTH = 6;
-const BUTTON_SIZE = 72;
 
 export default function IPhonePinOverlay({
   onUnlocked,
@@ -20,23 +19,14 @@ export default function IPhonePinOverlay({
   const shakeRef = useRef(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Auto-lock on page leave
+  // Clear the pending shake timer when the overlay goes away.
+  //
+  // NOTE: this overlay only renders while the archive is LOCKED, so there is no
+  // visitor session to revoke here. The auto-lock on leaving the page lives in
+  // the page component (`src/app/arsip-ibu/page.tsx`), which also covers the
+  // UNLOCKED state.
   useEffect(() => {
-    const handleBeforeUnload = async () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      // Optional: call logout endpoint saat user close/navigate
-      try {
-        await fetch("/api/archive/access/logout", {
-          method: "POST",
-          headers: { "x-vanka-request": "1" },
-        });
-      } catch {
-        // Ignore logout errors
-      }
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
@@ -137,6 +127,7 @@ export default function IPhonePinOverlay({
           {/* Notice */}
           {notice && (
             <motion.p
+              role="status"
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               className="rounded-2xl border border-[#e9c67c]/30 bg-[#e9c67c]/10 px-4 py-3 text-center text-sm text-[#f0d9a4]"
@@ -145,26 +136,38 @@ export default function IPhonePinOverlay({
             </motion.p>
           )}
 
-          {/* PIN Dots */}
-          <div className="flex justify-center gap-3 sm:gap-4">
-            {Array.from({ length: PIN_LENGTH }).map((_, i) => (
-              <motion.div
-                key={i}
-                initial={{ scale: 0.8 }}
-                animate={{
-                  scale: i < digits.length ? 1.2 : 1,
-                  backgroundColor:
-                    i < digits.length ? "#f6d77a" : "rgba(255,255,255,0.1)",
-                }}
-                transition={{ duration: 0.2 }}
-                className="h-4 w-4 rounded-full border border-white/20"
-              />
-            ))}
+          {/*
+            The PIN entry area is a labelled GROUP: assistive technology
+            announces it as "PIN", and the page-level test asserts that group
+            exists to prove the gate (not the experience) is on screen.
+          */}
+          <div
+            role="group"
+            aria-label="PIN"
+            className="flex flex-col items-center gap-4"
+          >
+            {/* PIN Dots */}
+            <div className="flex justify-center gap-3 sm:gap-4">
+              {Array.from({ length: PIN_LENGTH }).map((_, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ scale: 0.8 }}
+                  animate={{
+                    scale: i < digits.length ? 1.2 : 1,
+                    backgroundColor:
+                      i < digits.length ? "#f6d77a" : "rgba(255,255,255,0.1)",
+                  }}
+                  transition={{ duration: 0.2 }}
+                  className="h-4 w-4 rounded-full border border-white/20"
+                />
+              ))}
+            </div>
           </div>
 
           {/* Error */}
           {error && (
             <motion.p
+              role="alert"
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               className="rounded-2xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-center text-sm text-red-200"

@@ -1,4 +1,5 @@
 import type { LetterSection, LetterThumbnail } from "@/components/birthday/LetterScene";
+import { mediaUrlFor } from "@/lib/birthday/experience-media";
 import type { BirthdayLetterRow } from "@/lib/birthday/letters/repository";
 
 /**
@@ -26,7 +27,7 @@ export function toPublicThumbnailSrc(src: string): string {
   if (!trimmed.startsWith(prefix)) return src;
   const id = trimmed.slice(prefix.length);
   if (!UUID_RE.test(id)) return src;
-  return `/api/birthday/gallery/media/${id}`;
+  return mediaUrlFor("public", id);
 }
 
 /** Public-safe thumbnail (rewritten `src`), or null when no thumbnail was set. */

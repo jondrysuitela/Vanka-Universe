@@ -113,17 +113,26 @@ hash SHA-256 (`session.ts:27-29`). Kebocoran DB tidak langsung memberi token yan
 |---|---|---|---|---|
 | `id` | UUID | NO | `uuid_generate_v4()` | PK |
 | `email` | VARCHAR(255) | NO | — | Email yang dicoba (dinormalisasi lowercase oleh skema login) |
-| `ip_address` | VARCHAR(100) | NO | — | `NULL` dari request dinormalisasi menjadi `""` (`rate-limit.ts:21`) |
+| `ip_address` | VARCHAR(100) | **YES** | — | IP klien yang **dapat dipercaya**; `NULL` = identitas tidak diketahui |
 | `success` | BOOLEAN | NO | `false` | |
 | `attempted_at` | TIMESTAMPTZ | NO | `now()` | Dasar sliding window |
 
 **Indeks** (`draft:131-136`):
 - `idx_login_attempts_email_ip_time` — `(email, ip_address, attempted_at DESC)`.
+- `idx_login_attempts_email_null_ip_time` — `(email, attempted_at DESC) WHERE ip_address IS NULL`.
 - `idx_login_attempts_ip_time` — `(ip_address, attempted_at DESC)`.
 
-**Aturan aplikasi** (`rate-limit.ts:3-5,38-40`): terkunci bila ≥5 kegagalan untuk email+IP yang
-sama dalam 15 menit, **atau** ≥20 kegagalan dari IP yang sama dalam 15 menit. Login sukses
-menghapus baris gagal email+IP lalu menambah baris sukses (`rate-limit.ts:54-63`).
+**Sumber IP**: hanya header yang dinyatakan operator lewat `ARCHIVE_TRUSTED_PROXY_HEADER` yang
+dibaca. `x-forwarded-for` mentah bisa dipalsukan klien, sehingga tidak boleh dipercaya; tanpa
+proxy teardown yang dikonfigurasi, IP dicatat `NULL` (**bukan** `""` — string kosong akan
+menggabungkan semua klien tak dikenal ke satu bucket bersama).
+
+**Aturan aplikasi** (`rate-limit.ts`): terkunci bila ≥5 kegagalan untuk email+IP yang
+sama dalam 15 menit, **atau** ≥20 kegagalan dari IP yang sama dalam 15 menit. Bila IP tidak
+diketahui, guard per-IP dilewati dan kegagalan dihitung pada bucket **identity-only per email**
+(`ip_address IS NULL`) — tebakan tetap dibatasi, dan satu klien tak dikenal tidak pernah
+mengunci akun orang lain. Login sukses menghapus baris gagal (email+IP, atau bucket identity-only
+bila IP tak dikenal) lalu menambah baris sukses.
 
 **Tidak ada** trigger append-only dan **tidak ada** retensi: tabel ini tumbuh tanpa batas
 (dinyatakan di `draft:139-143`). Prune lama (>30 hari) masih rencana, belum ada penjadwalan.

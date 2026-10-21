@@ -249,7 +249,12 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires_at
 CREATE TABLE IF NOT EXISTS login_attempts (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   email        VARCHAR(255) NOT NULL,
-  ip_address   VARCHAR(100) NOT NULL,
+  -- NULL = IP klien TIDAK dapat dipercaya (tidak ada proxy tepercaya yang
+  -- dikonfigurasi). Baris NULL dihitung dalam bucket identity-only per email,
+  -- bukan bucket bersama: satu klien tak dikenal tidak boleh bisa mengunci
+  -- akun orang lain. JANGAN dinormalisasi menjadi '' (string kosong) — itu
+  -- akan menggabungkan semua klien tak dikenal ke satu bucket bersama.
+  ip_address   VARCHAR(100),
   success      BOOLEAN NOT NULL DEFAULT false,
   attempted_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -261,11 +266,23 @@ COMMENT ON TABLE login_attempts IS
 CREATE INDEX IF NOT EXISTS idx_login_attempts_email_ip_time
   ON login_attempts(email, ip_address, attempted_at DESC);
 
+-- Bucket identity-only (ip_address IS NULL): per email, bukan bucket bersama.
+CREATE INDEX IF NOT EXISTS idx_login_attempts_email_null_ip_time
+  ON login_attempts(email, attempted_at DESC)
+  WHERE ip_address IS NULL;
+
 -- Pembatasan global per IP (anti spray lintas email)
 CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_time
   ON login_attempts(ip_address, attempted_at DESC);
 
 -- Catatan APLIKASI (bukan SQL):
+--   * IP: kolom `ip_address` boleh NULL. NULL berarti "identitas klien tidak
+--     dapat dipercaya" — hanya header yang dinyatakan operator lewat
+--     ARCHIVE_TRUSTED_PROXY_HEADER yang dibaca; `x-forwarded-for` mentah bisa
+--     dipalsukan klien dan TIDAK boleh dipercaya. Percobaan dengan IP tak
+--     dikenal dihitung pada bucket identity-only per EMAIL (lihat
+--     `src/lib/auth/rate-limit.ts`), sehingga tebakan tetap dibatasi tanpa
+--     satu klien pernah mengunci akun orang lain.
 --   * RETENSI: tabel ini tumbuh TANPA BATAS. Direncanakan prune baris
 --     berumur > 30 hari (atau lebih pendek untuk baris success).
 --     Penjadwalan (cron pg_cron atau job aplikasi) BELUM dibuat —

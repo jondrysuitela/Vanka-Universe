@@ -204,6 +204,56 @@ describe("POST /api/auth/login", () => {
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe("ORIGIN_REJECTED");
   });
+
+  it("ignores a spoofed x-forwarded-for when no trusted proxy header is configured", async () => {
+    // A client-controlled header must never become the rate-limit identity:
+    // otherwise an attacker can forge a fresh IP per attempt and defeat the
+    // lockout entirely. With no trusted header the attempt is recorded in the
+    // identity-only bucket (ip_address IS NULL).
+    setupFake(fake, { admin: { ...adminRow, password_hash: goodHash } });
+    const headers = mutationHeaders();
+    headers.set("x-forwarded-for", "198.51.100.99");
+    const request = new Request(`${BASE}/api/auth/login`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ email: "owner@vanka.universe", password: "correct-horse-battery" }),
+    });
+
+    const res = await loginPost(request);
+    expect(res.status).toBe(200);
+
+    const insert = fake.query.mock.calls.find(([sql]) =>
+      String(sql).startsWith("INSERT INTO login_attempts"),
+    );
+    expect(insert).toBeDefined();
+    const params = insert?.[1] as unknown[];
+    expect(params[1]).toBeNull();
+  });
+
+  it("uses the configured trusted proxy header for the rate-limit identity", async () => {
+    process.env.ARCHIVE_TRUSTED_PROXY_HEADER = "x-forwarded-for";
+    try {
+      setupFake(fake, { admin: { ...adminRow, password_hash: goodHash } });
+      const headers = mutationHeaders();
+      headers.set("x-forwarded-for", "203.0.113.7");
+      const request = new Request(`${BASE}/api/auth/login`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ email: "owner@vanka.universe", password: "correct-horse-battery" }),
+      });
+
+      const res = await loginPost(request);
+      expect(res.status).toBe(200);
+
+      const insert = fake.query.mock.calls.find(([sql]) =>
+        String(sql).startsWith("INSERT INTO login_attempts"),
+      );
+      const params = insert?.[1] as unknown[];
+      expect(params[1]).toBe("203.0.113.7");
+    } finally {
+      delete process.env.ARCHIVE_TRUSTED_PROXY_HEADER;
+    }
+  });
 });
 
 describe("POST /api/auth/logout", () => {
