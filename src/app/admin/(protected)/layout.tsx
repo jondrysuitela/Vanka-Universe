@@ -1,17 +1,13 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { connection } from "next/server";
 
 import { getSessionAdmin, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 
 export const ADMIN_LOGIN_PATH = "/admin/login";
 
-// NOTE: `export const instant = false;` was REMOVED here on purpose. `instant`
-// is a Cache Components segment config and Cache Components is disabled in
-// next.config.ts (`cacheComponents: false`) to avoid the workerd staged-render
-// hang (cloudflare/workerd#7687, upstream fix in unreleased PR #1318). The
-// per-request behaviour is unchanged: this layout reads cookies and performs an
-// uncached session query, so it still renders on every request.
+// Force request-time rendering even with Cache Components enabled, to prevent
+// the uncached session query from running during prerendering.
+export const instant = false;
 
 /**
  * Server-side guard for every protected `/admin/*` page.
@@ -32,13 +28,6 @@ export const ADMIN_LOGIN_PATH = "/admin/login";
  * and is never shown to the client.
  */
 export default async function ProtectedAdminLayout({ children }: { children: React.ReactNode }) {
-  // Force request-time rendering BEFORE any database-backed work. This keeps the
-  // uncached session query (src/lib/auth/session.ts -> getPool().query()) off any
-  // prerender path; without it the lookup could be attempted while the route is
-  // being statically prepared. `connection()` is valid with Cache Components off
-  // (as configured here) and has no effect on the auth result.
-  await connection();
-
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
 

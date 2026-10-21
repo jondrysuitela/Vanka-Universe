@@ -1,0 +1,12 @@
+(()=>{"use strict";module.exports=[91433,t=>{t.s(["f",0,function(t,e=process.env){let s=function(t=process.env){let e=t.ARCHIVE_TRUSTED_PROXY_HEADER;if("string"!=typeof e)return null;let s=e.trim().toLowerCase();return s.length?s:null}(e);if(!s)return null;let n=t.headers.get(s);if(!n)return null;let a=n.split(",")[0].trim();return a.length?a:null}])},84580,t=>t.a(async(e,s)=>{try{var n=t.i(43793),a=e([n]);async function r(t){if(!t)return null;let e=(0,n.f)(),s=(await e.query("SELECT password_hash FROM admins WHERE id = $1",[t])).rows[0];return s?s.password_hash??null:null}[n]=a.then?(await a)():a,t.s(["f",0,r]),s()}catch(t){s(t)}},!1),23774,t=>t.a(async(e,s)=>{try{var n=t.i(43793),a=e([n]);async function r(t,e){if(!t)return!1;let s=(0,n.f)(),a=e??"",[r,i]=await Promise.all([s.query(`SELECT count(*)::int AS n
+         FROM login_attempts
+        WHERE email = $1 AND ip_address = $2 AND success = false
+          AND attempted_at > now() - interval '15 minutes'`,[t,a]),s.query(`SELECT count(*)::int AS n
+         FROM login_attempts
+        WHERE ip_address = $1 AND success = false
+          AND attempted_at > now() - interval '15 minutes'`,[a])]);return!!((r.rows[0]?.n??0)>=5||(i.rows[0]?.n??0)>=20)}async function i(t,e,s){let a=(0,n.f)(),r=e??"";s&&await a.query("DELETE FROM login_attempts WHERE email = $1 AND ip_address = $2 AND success = false",[t,r]),await a.query("INSERT INTO login_attempts (email, ip_address, success) VALUES ($1, $2, $3)",[t,r,s])}async function l(t,e){if(!t)throw Error("isReauthLocked: adminEmail is required.");if(e)return r(t,e);let s=(0,n.f)(),a=await s.query(`SELECT count(*)::int AS n
+       FROM login_attempts
+      WHERE email = $1 AND ip_address IS NULL AND success = false
+        AND attempted_at > now() - interval '15 minutes'`,[t]);return(a.rows[0]?.n??0)>=5}async function u(t,e,s){if(!t)throw Error("recordReauthAttempt: adminEmail is required.");let a=(0,n.f)();s&&await a.query("DELETE FROM login_attempts WHERE email = $1 AND success = false",[t]),await a.query("INSERT INTO login_attempts (email, ip_address, success) VALUES ($1, $2, $3)",[t,e??null,s])}[n]=a.then?(await a)():a,t.s(["P",0,r,"Y",0,l,"E",0,i,"i",0,u]),s()}catch(t){s(t)}},!1)]})();
+
+//# sourceMappingURL=src_lib_1a-mqhlth4w4j._.js.map

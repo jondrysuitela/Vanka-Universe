@@ -1,0 +1,3 @@
+module.exports=[68742,a=>{"use strict";var b=a.i(7997);a.s(["default",0,function({children:a}){return(0,b.jsx)(b.Fragment,{children:a})},"metadata",0,{title:"Vanka's First Universe · Birthday Experience",description:"A cinematic first-birthday journey — three scenes through Vanka's own little universe."}])},9541,function(a){a.n(a.i(68742))}];
+
+//# sourceMappingURL=src_app_birthday-experience_layout_tsx_0oru0dgdc49jf._.js.map

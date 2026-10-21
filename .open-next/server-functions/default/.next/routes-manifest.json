@@ -1,0 +1,270 @@
+{
+  "version": 3,
+  "pages404": true,
+  "appType": "app",
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "priority": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "onMatchHeaders": [],
+  "rewrites": {
+    "beforeFiles": [],
+    "afterFiles": [],
+    "fallback": []
+  },
+  "dynamicRoutes": [
+    {
+      "page": "/api/archive/experience/media/[id]",
+      "regex": "^/api/archive/experience/media/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/archive/experience/media/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/birthday/letters/[age]",
+      "regex": "^/api/birthday/letters/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPage": "nxtPage"
+      },
+      "namedRegex": "^/api/birthday/letters/(?<nxtPage>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/media/[id]",
+      "regex": "^/api/media/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/media/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/memories/[id]",
+      "regex": "^/api/memories/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/memories/(?<nxtPid>[^/]+?)(?:/)?$"
+    }
+  ],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_global-error",
+      "regex": "^/_global\\-error(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_global\\-error(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/admin",
+      "regex": "^/admin(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin(?:/)?$"
+    },
+    {
+      "page": "/admin/archive",
+      "regex": "^/admin/archive(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/archive(?:/)?$"
+    },
+    {
+      "page": "/admin/archive/experience",
+      "regex": "^/admin/archive/experience(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/archive/experience(?:/)?$"
+    },
+    {
+      "page": "/admin/archive/preview",
+      "regex": "^/admin/archive/preview(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/archive/preview(?:/)?$"
+    },
+    {
+      "page": "/admin/birthday",
+      "regex": "^/admin/birthday(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/birthday(?:/)?$"
+    },
+    {
+      "page": "/admin/content",
+      "regex": "^/admin/content(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/content(?:/)?$"
+    },
+    {
+      "page": "/admin/login",
+      "regex": "^/admin/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/login(?:/)?$"
+    },
+    {
+      "page": "/admin/media",
+      "regex": "^/admin/media(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/media(?:/)?$"
+    },
+    {
+      "page": "/admin/memories",
+      "regex": "^/admin/memories(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/memories(?:/)?$"
+    },
+    {
+      "page": "/admin/settings",
+      "regex": "^/admin/settings(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/settings(?:/)?$"
+    },
+    {
+      "page": "/admin/themes",
+      "regex": "^/admin/themes(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/themes(?:/)?$"
+    },
+    {
+      "page": "/api/archive",
+      "regex": "^/api/archive(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/archive(?:/)?$"
+    },
+    {
+      "page": "/api/archive/access",
+      "regex": "^/api/archive/access(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/archive/access(?:/)?$"
+    },
+    {
+      "page": "/api/archive/access/logout",
+      "regex": "^/api/archive/access/logout(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/archive/access/logout(?:/)?$"
+    },
+    {
+      "page": "/api/archive/access/pin",
+      "regex": "^/api/archive/access/pin(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/archive/access/pin(?:/)?$"
+    },
+    {
+      "page": "/api/archive/experience",
+      "regex": "^/api/archive/experience(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/archive/experience(?:/)?$"
+    },
+    {
+      "page": "/api/archive/gallery",
+      "regex": "^/api/archive/gallery(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/archive/gallery(?:/)?$"
+    },
+    {
+      "page": "/api/auth/login",
+      "regex": "^/api/auth/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/login(?:/)?$"
+    },
+    {
+      "page": "/api/auth/logout",
+      "regex": "^/api/auth/logout(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/logout(?:/)?$"
+    },
+    {
+      "page": "/api/auth/me",
+      "regex": "^/api/auth/me(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/me(?:/)?$"
+    },
+    {
+      "page": "/api/auth/password",
+      "regex": "^/api/auth/password(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/password(?:/)?$"
+    },
+    {
+      "page": "/api/birthday/editions",
+      "regex": "^/api/birthday/editions(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/birthday/editions(?:/)?$"
+    },
+    {
+      "page": "/api/birthday/letters",
+      "regex": "^/api/birthday/letters(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/birthday/letters(?:/)?$"
+    },
+    {
+      "page": "/api/media",
+      "regex": "^/api/media(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/media(?:/)?$"
+    },
+    {
+      "page": "/api/memories",
+      "regex": "^/api/memories(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/memories(?:/)?$"
+    },
+    {
+      "page": "/arsip-ibu",
+      "regex": "^/arsip\\-ibu(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/arsip\\-ibu(?:/)?$"
+    },
+    {
+      "page": "/birthday-experience",
+      "regex": "^/birthday\\-experience(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/birthday\\-experience(?:/)?$"
+    },
+    {
+      "page": "/favicon.ico",
+      "regex": "^/favicon\\.ico(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/favicon\\.ico(?:/)?$"
+    },
+    {
+      "page": "/memory-archive",
+      "regex": "^/memory\\-archive(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/memory\\-archive(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "rsc",
+    "varyHeader": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "prefetchHeader": "next-router-prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSegmentHeader": "next-router-segment-prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments",
+    "clientParamParsing": false,
+    "dynamicRSCPrerender": false
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  }
+}
