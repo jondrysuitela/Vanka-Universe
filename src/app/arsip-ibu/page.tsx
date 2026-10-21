@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import ArchivePinGate from "@/components/archive/ArchivePinGate";
+import IPhonePinOverlay from "@/components/archive/IPhonePinOverlay";
 import ArchiveShell from "@/components/archive/ArchiveShell";
 import ArchiveVisitorExperience from "@/components/archive/ArchiveVisitorExperience";
 import { ARCHIVE_VISITOR_MESSAGES } from "@/lib/archive/visitor";
@@ -65,7 +65,7 @@ export default function ArsipIbuPage() {
         </p>
       )}
 
-      {phase === "locked" && <ArchivePinGate onUnlocked={openArchive} notice={notice} />}
+      {phase === "locked" && <IPhonePinOverlay onUnlocked={openArchive} notice={notice} />}
 
       {phase === "unlocked" && (
         <ArchiveVisitorExperience
