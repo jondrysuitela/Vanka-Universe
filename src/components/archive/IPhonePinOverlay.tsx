@@ -18,6 +18,19 @@ export default function IPhonePinOverlay({
   const [error, setError] = useState<string | null>(null);
   const [shake, setShake] = useState(false);
   const shakeRef = useRef(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-lock on page leave
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   const pin = digits.join("");
   const complete = pin.length === PIN_LENGTH;
