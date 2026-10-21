@@ -169,7 +169,6 @@ export function setSessionCookie(response: NextResponse, token: string): void {
     ...COOKIE_COMMON,
     maxAge: SESSION_ABSOLUTE_DAYS * 24 * 60 * 60,
   });
-  console.log("[DEBUG] Cookie set. Response cookies:", response.cookies.getSetCookie());
 }
 
 /** Clear the session cookie (logout). */
