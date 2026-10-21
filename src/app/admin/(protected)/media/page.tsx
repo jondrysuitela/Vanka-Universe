@@ -279,7 +279,7 @@ export default function AdminMediaPage() {
         <div>
           <h1 className="text-3xl font-display tracking-widest text-[#fdf3d8]">Pustaka Media</h1>
           <p className="text-sm text-[#fdf3d8]/70 mt-2">
-            *(Penyimpanan privat (Cloudflare R2) — berkas tidak pernah masuk `public/`)*
+            *(Penyimpanan privat (Vercel + Cloudflare R2) — berkas tidak pernah masuk `public/`)*
           </p>
         </div>
         <button
