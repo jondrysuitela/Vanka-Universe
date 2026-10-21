@@ -1,0 +1,16 @@
+{
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "DB_DRIVER": "@db_driver",
+    "MEDIA_STORAGE_DRIVER": "@media_storage_driver",
+    "R2_ACCOUNT_ID": "@r2_account_id",
+    "R2_ACCESS_KEY_ID": "@r2_access_key_id",
+    "R2_SECRET_ACCESS_KEY": "@r2_secret_access_key",
+    "R2_BUCKET": "@r2_bucket",
+    "R2_KEY_PREFIX": "@r2_key_prefix",
+    "ARCHIVE_TRUSTED_PROXY_HEADER": "@archive_trusted_proxy_header",
+    "APP_ORIGIN": "@app_origin"
+  },
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next"
+}
