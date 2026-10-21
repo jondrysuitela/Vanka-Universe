@@ -22,8 +22,17 @@ export default function IPhonePinOverlay({
 
   // Auto-lock on page leave
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const handleBeforeUnload = async () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      // Optional: call logout endpoint saat user close/navigate
+      try {
+        await fetch("/api/archive/access/logout", {
+          method: "POST",
+          headers: { "x-vanka-request": "1" },
+        });
+      } catch {
+        // Ignore logout errors
+      }
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {

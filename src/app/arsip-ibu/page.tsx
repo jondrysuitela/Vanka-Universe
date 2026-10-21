@@ -57,6 +57,23 @@ export default function ArsipIbuPage() {
     setPhase("locked");
   }, []);
 
+  // Auto-logout when user leaves page
+  useEffect(() => {
+    return () => {
+      // Component unmounting = user left /arsip-ibu
+      void (async () => {
+        try {
+          await fetch("/api/archive/access/logout", {
+            method: "POST",
+            headers: { "x-vanka-request": "1" },
+          });
+        } catch {
+          // Ignore logout errors
+        }
+      })();
+    };
+  }, []);
+
   return (
     <ArchiveShell>
       {phase === "checking" && (
