@@ -24,6 +24,7 @@ export type MediaStorageDriver = (typeof MEDIA_STORAGE_DRIVERS)[number];
 /** Resolve the configured driver; throws `StorageConfigError` when invalid. */
 export function resolveMediaStorageDriver(): MediaStorageDriver {
   const raw = process.env.MEDIA_STORAGE_DRIVER;
+  console.log("[DEBUG] MEDIA_STORAGE_DRIVER:", raw ?? "UNDEFINED");
   if (raw === undefined || raw.trim() === "") return "filesystem";
   if ((MEDIA_STORAGE_DRIVERS as readonly string[]).includes(raw)) {
     return raw as MediaStorageDriver;
