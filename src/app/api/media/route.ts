@@ -101,12 +101,9 @@ export async function GET(request: Request): Promise<Response> {
 /** POST /api/media — store one uploaded file. Requires a session + media role. */
 export async function POST(request: Request): Promise<Response> {
   try {
-    console.log("[DEBUG] POST /api/media started");
     assertSafeUpload(request);
     const { admin } = await requireSession(request);
     requireRole(admin, MEDIA_OPERATOR_ROLES);
-
-    console.log("[DEBUG] Session OK, role OK");
 
     // Early rejection when the DECLARED size already exceeds any allowed upload,
     // so an oversized body is refused before it is buffered. `Content-Length` is
@@ -140,16 +137,12 @@ export async function POST(request: Request): Promise<Response> {
     const rawCollection = form.get("collection");
     const collection = parseCollection(typeof rawCollection === "string" ? rawCollection : null);
     const metadata = parseUploadMetadata(form.get("title"), form.get("description"));
-    
-    console.log("[DEBUG] About to save media upload");
     const record =
       metadata === undefined
         ? await saveMediaUpload(admin, file, collection)
         : await saveMediaUpload(admin, file, collection, metadata);
-    console.log("[DEBUG] Media upload saved successfully");
     return jsonOk(record, { status: 201 });
   } catch (error) {
-    console.log("[DEBUG] Error in POST /api/media:", error instanceof Error ? error.message : String(error));
     if (error instanceof ApiError) return error.toResponse();
     const mediaError = describeMediaStoreError(error);
     if (mediaError) return jsonError(mediaError.status, mediaError.code, mediaError.message);

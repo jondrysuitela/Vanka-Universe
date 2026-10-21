@@ -164,7 +164,6 @@ const COOKIE_COMMON = {
 
 /** Attach the session cookie to a response. */
 export function setSessionCookie(response: NextResponse, token: string): void {
-  console.log("[DEBUG] setSessionCookie called with token:", token.slice(0, 8) + "...");
   response.cookies.set(SESSION_COOKIE_NAME, token, {
     ...COOKIE_COMMON,
     maxAge: SESSION_ABSOLUTE_DAYS * 24 * 60 * 60,
