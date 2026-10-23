@@ -8,6 +8,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import LetterScene, { type LetterDraft, type LetterThumbnail } from "./LetterScene";
 import type { GalleryItem } from "@/lib/birthday/gallery/client-sync";
 import { mediaUrlFor } from "@/lib/birthday/experience-media";
+import { GALLERY_TRANSITION_S, kenBurnsMotion } from "@/lib/birthday/ken-burns";
 
 /**
  * Experience flow:
@@ -126,6 +127,7 @@ function FrameMedia({
   src,
   alt,
   kenBurns = false,
+  motionIndex = 0,
 }: {
   kind: GalleryKind;
   src?: string;
@@ -135,6 +137,11 @@ function FrameMedia({
    * memory-box gallery asks for it; the opening thumbnail stays still.
    */
   kenBurns?: boolean;
+  /**
+   * Position of this item in the album. Picks the drift direction, so each
+   * photo moves its own way and the movement never looks recycled.
+   */
+  motionIndex?: number;
 }) {
   if (kind === "image" && src) {
     // `unoptimized` is REQUIRED here: every media URL is an API route
@@ -155,11 +162,29 @@ function FrameMedia({
     if (!kenBurns) return image;
     // The wrapper is the positioned ancestor that `fill` needs, and clipping it
     // keeps the drift inside the rounded frame.
+    //
+    // The motion itself comes from the pure, unit-tested `kenBurnsMotion`: a
+    // slow zoom IN then OUT with a slight diagonal drift. It retraces its own
+    // path, so there is no visible snap where the loop restarts. Duration,
+    // amplitude and direction all live in that module — not here.
+    const drift = kenBurnsMotion(motionIndex);
     return (
       <motion.div
-        className="absolute inset-0 overflow-hidden"
-        animate={{ scale: [1, 1.08, 1] }}
-        transition={{ duration: 20, ease: "easeInOut", repeat: Infinity, repeatType: "reverse" }}
+        className="absolute inset-0 overflow-hidden will-change-transform"
+        style={{ transformOrigin: "center center" }}
+        initial={false}
+        animate={{ scale: drift.scale, x: drift.x, y: drift.y }}
+        transition={{
+          duration: drift.duration,
+          ease: drift.ease,
+          repeat: drift.repeat,
+          repeatType: drift.repeatType,
+          // NEGATIVE: each photo starts part-way into its own cycle, so two
+          // visible photos never breathe in lockstep. A positive delay would
+          // also do that, but it freezes the photo at rest for up to 2.4s
+          // first, which is the one thing this motion exists to avoid.
+          delay: -((motionIndex % 5) * 0.6),
+        }}
       >
         {image}
       </motion.div>
@@ -209,6 +234,7 @@ function PhotoFrame({
   className,
   footer,
   kenBurns,
+  motionIndex,
 }: {
   kind: GalleryKind;
   src?: string;
@@ -216,12 +242,19 @@ function PhotoFrame({
   className?: string;
   footer?: ReactNode;
   kenBurns?: boolean;
+  motionIndex?: number;
 }) {
   return (
     <figure
       className={`relative w-full overflow-hidden rounded-3xl border border-[#e9c67c]/25 ${className ?? ""}`}
     >
-      <FrameMedia kind={kind} src={src} alt={alt} kenBurns={kenBurns} />
+      <FrameMedia
+        kind={kind}
+        src={src}
+        alt={alt}
+        kenBurns={kenBurns}
+        motionIndex={motionIndex}
+      />
       {footer}
     </figure>
   );
@@ -238,12 +271,14 @@ function GalleryFrame({
   footer,
   getMediaUrl,
   kenBurns,
+  motionIndex,
 }: {
   item: GalleryItem;
   className?: string;
   footer?: ReactNode;
   getMediaUrl: (id: string) => string;
   kenBurns?: boolean;
+  motionIndex?: number;
 }) {
   if (item.id === PLACEHOLDER_ITEM.id) {
     return (
@@ -264,6 +299,7 @@ function GalleryFrame({
       className={className}
       footer={footer}
       kenBurns={kenBurns}
+      motionIndex={motionIndex}
     />
   );
 }
@@ -274,57 +310,63 @@ function GalleryFrame({
  */
 function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (id: string) => string }) {
   const [index, setIndex] = useState(0);
-  const [dir, setDir] = useState(1);
   const reduce = useReducedMotion();
 
   const list = items.length > 0 ? items : [PLACEHOLDER_ITEM];
   const item = list[index % list.length];
-  const goPrev = () => {
-    setDir(-1);
-    setIndex((i) => (i - 1 + list.length) % list.length);
-  };
-  const goNext = () => {
-    setDir(1);
-    setIndex((i) => (i + 1) % list.length);
-  };
-  const goTo = (i: number) => {
-    setDir(i >= index ? 1 : -1);
-    setIndex(i);
-  };
+  const goPrev = () => setIndex((i) => (i - 1 + list.length) % list.length);
+  const goNext = () => setIndex((i) => (i + 1) % list.length);
+  const goTo = (i: number) => setIndex(i);
 
-  // Direction-aware entrance: the next photo slides in from the side you asked
-  // for and the previous one leaves the other way. Reduced motion keeps a fade.
+  /**
+   * CROSSFADE, not a slide.
+   *
+   * The outgoing and incoming photos overlap: the new one fades in while the
+   * old one is still fully visible. `mode="wait"` would empty the frame between
+   * them, which reads as a flicker; a slide also feeds a visible gap at the
+   * edge of the frame. A short scale settle (1.015 → 1) gives the incoming
+   * photo a gentle "arrival" without moving the frame layout.
+   */
   const frameFade = {
-    initial: reduce ? { opacity: 0 } : { opacity: 0, x: dir * 48, scale: 0.97 },
-    animate: reduce ? { opacity: 1 } : { opacity: 1, x: 0, scale: 1 },
-    exit: reduce ? { opacity: 0 } : { opacity: 0, x: dir * -48, scale: 0.97 },
+    initial: reduce ? { opacity: 0 } : { opacity: 0, scale: 1.015 },
+    animate: reduce ? { opacity: 1 } : { opacity: 1, scale: 1 },
+    exit: reduce ? { opacity: 0 } : { opacity: 0, scale: 1 },
   };
 
   return (
     <div className="flex w-full max-w-3xl flex-col items-center gap-4">
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={`${item.id}-${index}`}
-          {...frameFade}
-          transition={{ duration: reduce ? 0 : 0.5, ease: "easeOut" }}
-          className="flex w-full justify-center"
-        >
-          <GalleryFrame
-            item={item}
-            getMediaUrl={getMediaUrl}
-            kenBurns={!reduce}
-            className="aspect-[3/4] w-full max-w-xs sm:max-w-sm"
-            footer={
-              <figcaption className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-5 pb-4 pt-12 text-left">
-                <p className="font-sans text-xs text-[#f6e3b2]">{itemCaption(item)}</p>
-                <p className="mt-0.5 font-sans text-[0.65rem] uppercase tracking-[0.25em] text-white/55">
-                  {index + 1} / {list.length}
-                </p>
-              </figcaption>
-            }
-          />
-        </motion.div>
-      </AnimatePresence>
+      {/*
+        The two frames share ONE grid cell, so the outgoing and incoming photo
+        are stacked at full size instead of sitting side by side. Without this
+        the flex row halves both frames mid-transition and they jump back to
+        full width when the old one unmounts.
+      */}
+      <div className="grid w-full max-w-xs justify-items-center sm:max-w-sm">
+        <AnimatePresence initial={false}>
+          <motion.div
+            key={`${item.id}-${index}`}
+            {...frameFade}
+            transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: "easeInOut" }}
+            className="col-start-1 row-start-1 flex w-full justify-center"
+          >
+            <GalleryFrame
+              item={item}
+              getMediaUrl={getMediaUrl}
+              kenBurns={!reduce}
+              motionIndex={index}
+              className="aspect-[3/4] w-full max-w-xs sm:max-w-sm"
+              footer={
+                <figcaption className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-5 pb-4 pt-12 text-left">
+                  <p className="font-sans text-xs text-[#f6e3b2]">{itemCaption(item)}</p>
+                  <p className="mt-0.5 font-sans text-[0.65rem] uppercase tracking-[0.25em] text-white/55">
+                    {index + 1} / {list.length}
+                  </p>
+                </figcaption>
+              }
+            />
+          </motion.div>
+        </AnimatePresence>
+      </div>
 
       <div className="flex w-full max-w-2xl items-center justify-between gap-3">
         <button
