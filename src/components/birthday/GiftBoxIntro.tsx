@@ -7,6 +7,12 @@ import GlitterBurst from "./GlitterBurst";
 
 interface GiftBoxIntroProps {
   onOpen: () => void;
+  /**
+   * Called the instant the visitor CLICKS the box — before the opening
+   * animation runs. This is the user gesture that lets the background music
+   * start, so it must fire on the click itself, not when the scene changes.
+   */
+  onReveal?: () => void;
 }
 
 /** Deterministic star burst vectors — no randomness, so SSR/client match. */
@@ -20,7 +26,7 @@ const PARTICLES = Array.from({ length: 14 }, (_, i) => {
  * Purely interactive — never autoplays. Under `prefers-reduced-motion` the
  * decorative motion is skipped but the button and the reveal still work.
  */
-export default function GiftBoxIntro({ onOpen }: GiftBoxIntroProps) {
+export default function GiftBoxIntro({ onOpen, onReveal }: GiftBoxIntroProps) {
   const reduce = useReducedMotion();
   const openingRef = useRef(false);
   const [opening, setOpening] = useState(false);
@@ -30,6 +36,9 @@ export default function GiftBoxIntro({ onOpen }: GiftBoxIntroProps) {
     if (openingRef.current) return;
     openingRef.current = true;
     setOpening(true);
+    // Music starts HERE, inside the click handler, because that is the gesture
+    // the browser requires before it will allow audio.
+    onReveal?.();
     // A timer guarantees the story is reachable even if motion is reduced or
     // an animation never settles — the visitor can never get stuck.
     window.setTimeout(() => onOpen(), reduce ? 200 : 1700);

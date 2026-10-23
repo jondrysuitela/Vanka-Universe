@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import ExperienceMusic from "./ExperienceMusic";
 import ExperienceScene, { LETTER_SCENE_INDEX, SCENE_COUNT } from "./ExperienceScene";
 import GiftBoxIntro from "./GiftBoxIntro";
 import {
@@ -76,6 +77,12 @@ export default function BirthdayExperiencePlayer({
   const [ready, setReady] = useState(false);
   const [active, setActive] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  /**
+   * The visitor has clicked the gift box. That click is the gesture browsers
+   * require before audio may play, so music is keyed off THIS — not off the
+   * scene, which also changes on an admin jump straight to the letter.
+   */
+  const [musicStarted, setMusicStarted] = useState(false);
   const [letterDraft, setLetterDraft] = useState<LetterDraft>(DEFAULT_LETTER_DRAFT);
   const [letterPreview, setLetterPreview] = useState(false);
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
@@ -187,6 +194,12 @@ export default function BirthdayExperiencePlayer({
         </button>
       )}
 
+      {/*
+        Background music for this edition. It is mounted from the start (so the
+        file probe can run) but stays silent until the gift box is opened.
+      */}
+      {ready && <ExperienceMusic age={editionAge ?? draftAge} started={musicStarted} overlay={overlay} />}
+
       {!overlay && draftPreview && (
         <Link
           href="/admin/birthday"
@@ -210,7 +223,7 @@ export default function BirthdayExperiencePlayer({
             mediaSrc={mediaSrc}
           />
         ) : (
-          <GiftBoxIntro onOpen={() => setRevealed(true)} />
+          <GiftBoxIntro onOpen={() => setRevealed(true)} onReveal={() => setMusicStarted(true)} />
         ))}
     </div>
   );
