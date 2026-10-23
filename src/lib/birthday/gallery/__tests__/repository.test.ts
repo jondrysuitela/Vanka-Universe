@@ -78,6 +78,23 @@ describe("listCycleGallery", () => {
     ]);
   });
 
+  it("includes photos taken ON the birthday, but not the day after", async () => {
+    // The party photos are taken on 27 October; they belong to THIS album.
+    // 28 October 00:00 WIT (UPLOAD_END_2026) already belongs to next year.
+    const party = record({
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      createdAt: "2026-10-27T03:00:00.000Z", // 27 Oct 12:00 WIT
+    });
+    const dayAfter = record({
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      createdAt: "2026-10-27T15:00:00.000Z", // 28 Oct 00:00 WIT
+    });
+    store.listMedia.mockResolvedValue([party, dayAfter]);
+
+    const items = await listCycleGallery(cycleWindowForYear(2026)!);
+    expect(items.map((item) => item.id)).toEqual([party.id]);
+  });
+
   it("treats a record with no collection as the birthday pool (legacy index)", async () => {
     const legacy = record();
     delete (legacy as { collection?: unknown }).collection;

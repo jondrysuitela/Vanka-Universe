@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 
 const PIN_LENGTH = 6;
@@ -17,19 +17,16 @@ export default function IPhonePinOverlay({
   const [error, setError] = useState<string | null>(null);
   const [shake, setShake] = useState(false);
   const shakeRef = useRef(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Clear the pending shake timer when the overlay goes away.
-  //
   // NOTE: this overlay only renders while the archive is LOCKED, so there is no
   // visitor session to revoke here. The auto-lock on leaving the page lives in
   // the page component (`src/app/arsip-ibu/page.tsx`), which also covers the
   // UNLOCKED state.
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
+  //
+  // There is deliberately NO unmount cleanup here: nothing in this component
+  // holds a timer. The shake animation is driven by framer-motion, and the old
+  // `timeoutRef` was never assigned anywhere, so clearing it could never have
+  // cancelled anything.
 
   const pin = digits.join("");
   const complete = pin.length === PIN_LENGTH;

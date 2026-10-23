@@ -1,6 +1,7 @@
 import type { LetterDraft, LetterSection, LetterThumbnail } from "@/components/birthday/LetterScene";
 import { loadBirthdayGallery, type GalleryItem } from "@/lib/birthday/gallery/client-sync";
-import { loadBirthdayLetter, type PublicLetter } from "@/lib/birthday/letters/public-sync";
+import { loadBirthdayLetter } from "@/lib/birthday/letters/public-sync";
+import type { PublicLetter } from "@/lib/birthday/letters/public-view";
 
 /**
  * Public birthday-experience loader (Tahap 4G.43 wiring).

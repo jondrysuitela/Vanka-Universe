@@ -9,7 +9,9 @@ import {
   type LetterDraft,
 } from "@/components/birthday/LetterScene";
 import { useToast } from "@/components/admin/ui/ToastProvider";
-import { cycleForDate, isCycleRevealed } from "@/lib/birthday/cycle";
+import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
+import { cycleContainingUpload, isCycleRevealed } from "@/lib/birthday/cycle";
+import { saveLetterEnsuringEdition } from "@/lib/birthday/letter-sync";
 
 /**
  * Pustaka Media — upload photos/videos to the private local server store.
@@ -55,7 +57,7 @@ function formatBytes(bytes: number): string {
  * the age-1 edition.
  */
 function editionAgeFor(item: SavedMedia): number {
-  return cycleForDate(new Date(item.createdAt))?.age ?? 1;
+  return cycleContainingUpload(Date.parse(item.createdAt))?.age ?? 1;
 }
 
 /**
@@ -64,17 +66,17 @@ function editionAgeFor(item: SavedMedia): number {
  * server refuses the letter write). Falls back to `false` for an unknown cycle.
  */
 function editionFrozen(item: SavedMedia): boolean {
-  const cycle = cycleForDate(new Date(item.createdAt));
+  const cycle = cycleContainingUpload(Date.parse(item.createdAt));
   return cycle !== null && isCycleRevealed(cycle.year, new Date());
 }
 
 /**
- * "Jadikan Thumbnail" — writes this image into the opening-thumbnail field of
- * the photo's birthday edition DRAFT (localStorage), so it shows up straight
- * away in the birthday experience's opening frame. `src` points at the private
- * `/api/media/[id]` (admin session). Only IMAGES in the BIRTHDAY pool can be the
- * birthday-experience thumbnail; Arsip Ibu media is excluded, and an edition that
- * has already gone live is frozen.
+ * "Jadikan Thumbnail" — make this image the opening frame of the birthday
+ * experience. See `setThumbnail` for the two places the choice is written.
+ *
+ * Only IMAGES in the BIRTHDAY pool can be the opening thumbnail; Arsip Ibu media
+ * is excluded, and an edition that has already gone live is frozen. The button
+ * ASKS FOR CONFIRMATION first — the choice changes what every visitor sees.
  */
 function ThumbnailButton({ item, onSet }: { item: SavedMedia; onSet: (item: SavedMedia) => void }) {
   if (item.kind !== "image" || item.collection === "archive") return null;
@@ -239,13 +241,15 @@ export default function AdminMediaPage() {
     }
   }
 
+  /** The photo awaiting confirmation, or null when no dialog is open. */
+  const [thumbCandidate, setThumbCandidate] = useState<SavedMedia | null>(null);
+  const [thumbSaving, setThumbSaving] = useState(false);
+
   /**
-   * Set a photo as the opening thumbnail of its birthday edition. Writes the
-   * BROWSER DRAFT only (the same store "Tulis Surat" edits); nothing is sent to
-   * the server here. The birthday experience reads this draft, so the frame
-   * appears immediately in preview.
+   * Ask before changing the opening frame — this is what every visitor sees on
+   * the birthday page, so it is not a silent edit.
    */
-  function setThumbnail(item: SavedMedia) {
+  function requestThumbnail(item: SavedMedia) {
     if (editionFrozen(item)) {
       showToast({
         title: "Sudah tayang — dibekukan",
@@ -255,22 +259,77 @@ export default function AdminMediaPage() {
       });
       return;
     }
+    setThumbCandidate(item);
+  }
+
+  /**
+   * Make the confirmed photo the opening frame of its birthday edition.
+   *
+   * It is written to TWO places, and both are required:
+   *
+   *  1. The BROWSER DRAFT (`localStorage`) — what the ADMIN preview reads. An
+   *     admin must see their own unsaved choice immediately.
+   *  2. The SERVER letter (`POST /api/birthday/letters`) — what the PUBLIC
+   *     experience reads after the reveal. Without this the thumbnail only ever
+   *     existed in one browser and never appeared on the published page, which
+   *     is exactly the bug this fixes.
+   *
+   * The `src` is stored as the private `/api/media/[id]` URL. The public read
+   * rewrites it to the date-gated gallery route (`letters/public-view.ts`), so
+   * no private path is ever served to a visitor.
+   */
+  async function setThumbnail(item: SavedMedia) {
     const age = editionAgeFor(item);
+    const thumbnail = {
+      src: `/api/media/${item.id}`,
+      alt: item.title?.trim() || item.name,
+      ...(item.description?.trim() ? { caption: item.description.trim() } : {}),
+    };
+
     const base: LetterDraft =
       loadLetterForAge(age) ?? (age === 1 ? DEFAULT_LETTER_DRAFT : EMPTY_LETTER_DRAFT);
-    saveLetterForAge(age, {
-      ...base,
-      thumbnail: {
-        src: `/api/media/${item.id}`,
-        alt: item.title?.trim() || item.name,
-        ...(item.description?.trim() ? { caption: item.description.trim() } : {}),
-      },
-    });
-    showToast({
-      title: "Thumbnail diset",
-      message: `Foto ini jadi bingkai pembuka ulang tahun ke-${age} (draf browser). Buka "Tulis Surat" + kirim ke server bila sudah final.`,
-      type: "success",
-    });
+    const draft: LetterDraft = { ...base, thumbnail };
+    saveLetterForAge(age, draft);
+
+    setThumbSaving(true);
+    try {
+      const outcome = await saveLetterEnsuringEdition(fetch, age, draft);
+      if (outcome.status === "saved") {
+        showToast({
+          title: "Thumbnail diset",
+          message: `Foto ini sekarang jadi bingkai pembuka ulang tahun ke-${age} dan sudah tersimpan di server.`,
+          type: "success",
+        });
+      } else if (outcome.status === "published") {
+        showToast({
+          title: "Edisi sudah tayang",
+          message:
+            "Tersimpan di draf browser, tetapi server menolak karena edisi ini sudah tayang. Bingkai publik tidak berubah.",
+          type: "error",
+        });
+      } else if (outcome.status === "validation") {
+        showToast({
+          title: "Input ditolak server",
+          message: `Tersimpan di draf browser, tetapi server menolak: ${outcome.message}`,
+          type: "error",
+        });
+      } else if (outcome.status === "unauthorized") {
+        showToast({
+          title: "Sesi berakhir",
+          message: "Tersimpan di draf browser, tetapi server menolak: sesi admin tidak valid.",
+          type: "error",
+        });
+      } else {
+        showToast({
+          title: "Belum tersimpan ke server",
+          message:
+            "Tersimpan di draf browser, tetapi server tidak dapat dihubungi. Coba lagi dari “Tulis Surat”.",
+          type: "error",
+        });
+      }
+    } finally {
+      setThumbSaving(false);
+    }
   }
 
   return (
@@ -493,7 +552,7 @@ export default function AdminMediaPage() {
                     {item.collection === "archive" ? "Arsip Ibu" : "Ulang Tahun"}
                   </p>
                   <div className="pt-2">
-                    <ThumbnailButton item={item} onSet={setThumbnail} />
+                    <ThumbnailButton item={item} onSet={requestThumbnail} />
                   </div>
                 </div>
               </div>
@@ -501,6 +560,29 @@ export default function AdminMediaPage() {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={thumbCandidate !== null}
+        title="Jadikan foto ini thumbnail?"
+        description={
+          thumbCandidate
+            ? `"${thumbCandidate.title?.trim() || thumbCandidate.name}" akan menjadi bingkai pembuka ulang tahun ke-${editionAgeFor(
+                thumbCandidate,
+              )} dan langsung tersimpan, sehingga pengunjung melihatnya di halaman Vanka's First Universe.`
+            : undefined
+        }
+        confirmLabel={thumbSaving ? "Menyimpan…" : "Ya, jadikan thumbnail"}
+        cancelLabel="Batal"
+        onConfirm={() => {
+          const item = thumbCandidate;
+          if (!item || thumbSaving) return;
+          setThumbCandidate(null);
+          void setThumbnail(item);
+        }}
+        onCancel={() => {
+          if (!thumbSaving) setThumbCandidate(null);
+        }}
+      />
     </div>
   );
 }

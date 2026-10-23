@@ -1,4 +1,4 @@
-import { cycleForDate, isCycleRevealed } from "@/lib/birthday/cycle";
+import { cycleContainingUpload, isCycleRevealed } from "@/lib/birthday/cycle";
 import { MediaObjectsUnavailableError } from "@/lib/media/db/errors";
 import { MediaIndexError, findMediaRecord } from "@/lib/media/store";
 import {
@@ -56,7 +56,8 @@ export async function findBirthdayGalleryMediaReferences(
 
   if (!record || (record.collection ?? "birthday") !== "birthday") return [];
 
-  const cycle = cycleForDate(new Date(record.createdAt));
+  // The media's ALBUM is decided by its upload window, not by the current time.
+  const cycle = cycleContainingUpload(Date.parse(record.createdAt));
   if (cycle === null || !isCycleRevealed(cycle.year, new Date())) return [];
 
   return [

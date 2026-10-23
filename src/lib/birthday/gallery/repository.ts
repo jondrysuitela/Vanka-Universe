@@ -1,5 +1,5 @@
 import {
-  cycleForDate,
+  cycleContainingUpload,
   isCycleRevealed,
   type BirthdayCycle,
 } from "@/lib/birthday/cycle";
@@ -75,14 +75,17 @@ function rowToItem(record: MediaRecord): BirthdayGalleryItem {
 
 /**
  * Media uploaded inside a cycle window, oldest first (half-open: `start <= t <
- * revealAt`). Only the `birthday` pool participates — archive ("Arsip Ibu")
+ * uploadEnd`). Only the `birthday` pool participates — archive ("Arsip Ibu")
  * uploads never appear. Records written before pools existed default to
  * `birthday` (the store normalizes that on read).
+ *
+ * The end is `uploadEnd`, NOT `revealAt`: the birthday's own photos are taken on
+ * the birthday and must still land in that year's album.
  */
 export async function listCycleGallery(cycle: BirthdayCycle): Promise<BirthdayGalleryItem[]> {
   const records = await guardedStoreRead(() => listMedia());
   const start = cycle.start.getTime();
-  const end = cycle.revealAt.getTime();
+  const end = cycle.uploadEnd.getTime();
 
   return records
     .filter((record) => (record.collection ?? "birthday") === "birthday")
@@ -102,6 +105,13 @@ export async function isMediaPubliclyRevealed(mediaId: string, now: Date): Promi
   const record = await guardedStoreRead(() => findMediaRecord(mediaId));
   if (!record || (record.collection ?? "birthday") !== "birthday") return false;
 
-  const cycle = cycleForDate(new Date(record.createdAt));
+  // NOTE: `cycleForDate` is NOT used here. During the birthday's own day a
+  // cycle is ALREADY revealed but still in its upload window, so `cycleForDate`
+  // would report the cycle that is still collecting — and this media, taken
+  // earlier today, belongs to that one. What matters for serving bytes is
+  // whether ANY cycle whose upload window contains this media is revealed.
+  const uploadedAt = Date.parse(record.createdAt);
+  if (!Number.isFinite(uploadedAt)) return false;
+  const cycle = cycleContainingUpload(uploadedAt);
   return cycle !== null && isCycleRevealed(cycle.year, now);
 }
