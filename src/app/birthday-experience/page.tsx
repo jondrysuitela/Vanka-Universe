@@ -15,6 +15,11 @@ import {
 } from "@/components/birthday/LetterScene";
 import { resolveExperienceParams } from "@/lib/birthday/experience-params";
 import {
+  FIRST_EXPERIENCE_OPEN_LABEL,
+  experienceLockedMessage,
+  isFirstExperienceOpen,
+} from "@/lib/birthday/experience-open";
+import {
   mediaUrlFor,
   resolveMediaRoute,
   type ExperienceMediaRoute,
@@ -51,6 +56,12 @@ export default function BirthdayExperiencePage() {
   const [ready, setReady] = useState(false);
   const [active, setActive] = useState(0);
   const [fromAdmin, setFromAdmin] = useState(false);
+  /**
+   * Public gate: the experience is not shown before its birthday. `null` until
+   * the browser clock has been read (SSR has no visitor clock), so nothing is
+   * revealed during hydration and no markup mismatches.
+   */
+  const [experienceOpen, setExperienceOpen] = useState<boolean | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [letterDraft, setLetterDraft] = useState<LetterDraft>(DEFAULT_LETTER_DRAFT);
   const [letterPreview, setLetterPreview] = useState(false);
@@ -78,6 +89,16 @@ export default function BirthdayExperiencePage() {
     const frame = requestAnimationFrame(() => {
       const plan = resolveExperienceParams(window.location.search);
       setFromAdmin(plan.fromAdmin);
+
+      // The admin preview (?preview=1 / full=1 / letter=1) is never gated: the
+      // author must see the experience before the birthday. A public visitor is.
+      const open = plan.fromAdmin || isFirstExperienceOpen(new Date());
+      setExperienceOpen(open);
+      if (!open) {
+        // Closed branch only — nothing of the experience is loaded or fetched.
+        setReady(true);
+        return;
+      }
 
       if (plan.useDraft) {
         // Admin preview: read the browser-local draft of the chosen edition.
@@ -155,6 +176,7 @@ export default function BirthdayExperiencePage() {
       )}
 
       {ready &&
+        experienceOpen === true &&
         (revealed ? (
           <ExperienceScene
             active={active}
@@ -170,6 +192,34 @@ export default function BirthdayExperiencePage() {
         ) : (
           <GiftBoxIntro onOpen={() => setRevealed(true)} />
         ))}
+
+      {/*
+        Closed for the public until the reveal instant. The admin preview never
+        reaches this branch (it sets `experienceOpen` to true). Nothing of the
+        experience — letter, thumbnail, gallery — is rendered here.
+      */}
+      {ready && experienceOpen === false && (
+        <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-xl flex-col items-center justify-center gap-6 px-6 text-center">
+          <span className="rounded-full border border-[#e9c67c]/45 bg-[#0b1226]/70 px-5 py-2 font-sans text-[0.65rem] font-medium uppercase tracking-[0.4em] text-[#f6e3b2] backdrop-blur-md">
+            Masih Dijaga
+          </span>
+          <h1 className="text-shadow-lg font-display text-3xl leading-snug text-[#f6e3b2] sm:text-4xl">
+            {FIRST_EXPERIENCE_OPEN_LABEL}
+          </h1>
+          <p role="status" className="font-serif text-lg leading-relaxed text-white/75">
+            {experienceLockedMessage()}
+          </p>
+          <p className="font-serif text-base italic text-white/60">
+            Sampai tanggal itu, cerita ini hanya untuk Ayah dan Ibu.
+          </p>
+          <Link
+            href="/"
+            className="mt-2 inline-flex items-center justify-center rounded-full border border-white/25 px-8 py-3.5 font-sans text-xs font-semibold uppercase tracking-[0.24em] text-white/80 transition duration-300 hover:border-[#e9c67c] hover:text-[#f6e3b2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c]"
+          >
+            ← Kembali ke Vanka Universe
+          </Link>
+        </div>
+      )}
     </main>
   );
 }

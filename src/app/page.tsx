@@ -1,8 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import CosmicBackdrop from "@/components/CosmicBackdrop";
+import {
+  FIRST_EXPERIENCE_OPEN_LABEL,
+  isFirstExperienceOpen,
+} from "@/lib/birthday/experience-open";
 
 type Chapter = {
   eyebrow: string;
@@ -12,6 +17,11 @@ type Chapter = {
   href: string;
   /** Private archive chapter: adds the lock glyph and a "Dilindungi PIN" badge. */
   locked: boolean;
+  /**
+   * The Vanka Experience chapter is CLOSED until its reveal date: before then
+   * the card does not navigate, it only says when the experience opens.
+   */
+  gated: boolean;
   /**
    * Per-card glow. A thin coloured shadow at rest that intensifies on
    * hover/focus. Pure box-shadow — no extra elements, no layout impact.
@@ -48,10 +58,11 @@ const CHAPTERS: readonly Chapter[] = [
   {
     eyebrow: "Chapter One · 27 October 2026",
     title: "Birthday Experience",
-    body: "A cinematic birthday journey made for your very first year — still being written, scene by scene. Open this chapter to see exactly what is planned, and what has not been built yet.",
+    body: "A cinematic birthday journey made for your very first year — still being written, scene by scene. This chapter opens on Vanka's first birthday.",
     cta: "Open the Birthday Experience",
     href: "/birthday-experience",
     locked: false,
+    gated: true,
     glow: "shadow-[0_0_26px_-14px_rgba(139,92,246,0.6)] hover:shadow-[0_0_48px_-10px_rgba(139,92,246,0.75)] focus-visible:shadow-[0_0_48px_-10px_rgba(139,92,246,0.75)]",
   },
   {
@@ -61,6 +72,7 @@ const CHAPTERS: readonly Chapter[] = [
     cta: "Visit the Memory Archive",
     href: "/memory-archive",
     locked: false,
+    gated: false,
     glow: "shadow-[0_0_26px_-14px_rgba(96,165,250,0.6)] hover:shadow-[0_0_48px_-10px_rgba(96,165,250,0.75)] focus-visible:shadow-[0_0_48px_-10px_rgba(96,165,250,0.75)]",
   },
   {
@@ -70,12 +82,44 @@ const CHAPTERS: readonly Chapter[] = [
     cta: "Buka Arsip Privat",
     href: "/arsip-ibu",
     locked: true,
+    gated: false,
     glow: "shadow-[0_0_26px_-14px_rgba(233,198,124,0.65)] hover:shadow-[0_0_48px_-10px_rgba(233,198,124,0.8)] focus-visible:shadow-[0_0_48px_-10px_rgba(233,198,124,0.8)]",
   },
 ];
 
+/** Copy shown on the closed experience card / announcement. */
+const GATED_BADGE = `Terbuka ${FIRST_EXPERIENCE_OPEN_LABEL}`;
+const GATED_NOTICE = `Vanka Experience akan terbuka pada ${FIRST_EXPERIENCE_OPEN_LABEL}. Sampai saat itu, ceritanya masih dijaga.`;
+
 export default function Home() {
   const reducedMotion = useReducedMotion();
+  /**
+   * Whether the public experience is open yet.
+   *
+   * `null` until the browser clock has been read in an effect: the server has no
+   * visitor clock and rendering the date check during SSR would mismatch on
+   * hydration. A closed card is what everyone sees first; visitors after the
+   * reveal get the working link a frame later.
+   */
+  const [experienceOpen, setExperienceOpen] = useState<boolean | null>(null);
+  const [showGateNotice, setShowGateNotice] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      setExperienceOpen(isFirstExperienceOpen(new Date()));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  // Close the announcement with Escape, like any other dialog.
+  useEffect(() => {
+    if (!showGateNotice) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowGateNotice(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showGateNotice]);
 
   const scrollToSection = (id: string) => {
     const target = document.getElementById(id);
@@ -231,42 +275,68 @@ export default function Home() {
           </div>
 
           <div className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {CHAPTERS.map((chapter) => (
-              <Link
-                key={chapter.href}
-                href={chapter.href}
-                className={`group backdrop-blur-glass flex h-full flex-col gap-5 rounded-3xl p-8 transition duration-300 motion-reduce:transition-none hover:-translate-y-1.5 hover:border-[#e9c67c]/60 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c] sm:p-10 ${chapter.glow}`}
-              >
-                <span className="font-sans text-[0.65rem] uppercase tracking-[0.35em] text-[#e9c67c]">
-                  {chapter.eyebrow}
-                </span>
-                <div className="flex items-center gap-3">
+            {CHAPTERS.map((chapter) => {
+              // A gated chapter is never a link before its reveal date: the card
+              // becomes a button that only announces when the experience opens.
+              // One frame is needed to read the browser clock, so during SSR and
+              // the first paint (`null`) the same closed card is shown.
+              const closed = chapter.gated && experienceOpen !== true;
+              const cardClass = `group backdrop-blur-glass flex h-full flex-col gap-5 rounded-3xl p-8 text-left transition duration-300 motion-reduce:transition-none hover:-translate-y-1.5 hover:border-[#e9c67c]/60 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c] sm:p-10 ${chapter.glow}`;
+
+              const content = (
+                <>
+                  <span className="font-sans text-[0.65rem] uppercase tracking-[0.35em] text-[#e9c67c]">
+                    {chapter.eyebrow}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    {(chapter.locked || closed) && (
+                      <LockGlyph className="h-6 w-6 shrink-0 text-[#e9c67c]" />
+                    )}
+                    <h3 className="font-display text-2xl text-[#f6e3b2] sm:text-3xl">
+                      {chapter.title}
+                    </h3>
+                  </div>
+                  <p className="font-serif leading-relaxed text-white/75">
+                    {chapter.body}
+                  </p>
                   {chapter.locked && (
-                    <LockGlyph className="h-6 w-6 shrink-0 text-[#e9c67c]" />
+                    <span className="inline-flex w-fit items-center rounded-full border border-[#e9c67c]/45 bg-[#0b1226]/70 px-3 py-1 font-sans text-[0.6rem] font-semibold uppercase tracking-[0.28em] text-[#f6e3b2]">
+                      Dilindungi PIN
+                    </span>
                   )}
-                  <h3 className="font-display text-2xl text-[#f6e3b2] sm:text-3xl">
-                    {chapter.title}
-                  </h3>
-                </div>
-                <p className="font-serif leading-relaxed text-white/75">
-                  {chapter.body}
-                </p>
-                {chapter.locked && (
-                  <span className="inline-flex w-fit items-center rounded-full border border-[#e9c67c]/45 bg-[#0b1226]/70 px-3 py-1 font-sans text-[0.6rem] font-semibold uppercase tracking-[0.28em] text-[#f6e3b2]">
-                    Dilindungi PIN
+                  {closed && (
+                    <span className="inline-flex w-fit items-center rounded-full border border-[#e9c67c]/45 bg-[#0b1226]/70 px-3 py-1 font-sans text-[0.6rem] font-semibold uppercase tracking-[0.28em] text-[#f6e3b2]">
+                      {GATED_BADGE}
+                    </span>
+                  )}
+                  <span className="mt-auto flex items-center gap-2 font-sans text-xs font-bold uppercase tracking-[0.22em] text-white/85 transition group-hover:text-[#f6e3b2]">
+                    {closed ? "Lihat tanggal terbuka" : chapter.cta}
+                    <span
+                      aria-hidden="true"
+                      className="transition duration-300 group-hover:translate-x-1"
+                    >
+                      →
+                    </span>
                   </span>
-                )}
-                <span className="mt-auto flex items-center gap-2 font-sans text-xs font-bold uppercase tracking-[0.22em] text-white/85 transition group-hover:text-[#f6e3b2]">
-                  {chapter.cta}
-                  <span
-                    aria-hidden="true"
-                    className="transition duration-300 group-hover:translate-x-1"
-                  >
-                    →
-                  </span>
-                </span>
-              </Link>
-            ))}
+                </>
+              );
+
+              return closed ? (
+                <button
+                  key={chapter.href}
+                  type="button"
+                  onClick={() => setShowGateNotice(true)}
+                  aria-haspopup="dialog"
+                  className={cardClass}
+                >
+                  {content}
+                </button>
+              ) : (
+                <Link key={chapter.href} href={chapter.href} className={cardClass}>
+                  {content}
+                </Link>
+              );
+            })}
           </div>
         </motion.div>
       </section>
@@ -319,6 +389,48 @@ export default function Home() {
           </p>
         </motion.div>
       </section>
+
+      {/*
+        Announcement for a closed chapter. It replaces navigation entirely: a
+        public visitor cannot open the experience before its reveal date, and
+        this is where they learn when it opens.
+      */}
+      {showGateNotice && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center px-6">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setShowGateNotice(false)}
+            aria-hidden="true"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="gate-title"
+            aria-describedby="gate-desc"
+            className="backdrop-blur-glass relative w-full max-w-md rounded-3xl border border-[#e9c67c]/30 p-8 text-center"
+          >
+            <p className="font-sans text-[0.65rem] font-semibold uppercase tracking-[0.4em] text-[#e9c67c]">
+              Chapter One
+            </p>
+            <h2
+              id="gate-title"
+              className="text-shadow-lg mt-3 font-display text-2xl text-[#f6e3b2] sm:text-3xl"
+            >
+              {FIRST_EXPERIENCE_OPEN_LABEL}
+            </h2>
+            <p id="gate-desc" className="mt-4 font-serif leading-relaxed text-white/75">
+              {GATED_NOTICE}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowGateNotice(false)}
+              className="mt-7 inline-flex items-center justify-center rounded-full bg-gradient-to-b from-[#f7e6bb] to-[#d8ab5e] px-8 py-3.5 font-sans text-xs font-bold uppercase tracking-[0.28em] text-[#20160a] transition duration-300 hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f6e3b2]"
+            >
+              Mengerti
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
