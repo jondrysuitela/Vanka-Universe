@@ -13,6 +13,8 @@ describe("resolveExperienceParams", () => {
       age: 1,
       openLetter: false,
       openGallery: false,
+      editionAge: null,
+      editionYear: null,
     });
   });
 
@@ -55,5 +57,37 @@ describe("resolveExperienceParams", () => {
   it("ignores any other flag value (only '1' counts)", () => {
     const plan = resolveExperienceParams("?preview=true&full=yes&gallery=0");
     expect(plan).toMatchObject({ fromAdmin: false, useDraft: false, openGallery: false });
+  });
+
+  it("edition=N is a PUBLIC replay, never a draft preview", () => {
+    const plan = resolveExperienceParams("?edition=2");
+    expect(plan.fromAdmin).toBe(false);
+    expect(plan.useDraft).toBe(false);
+    expect(plan.editionAge).toBe(2);
+    expect(plan.age).toBe(2);
+  });
+
+  it("maps the edition AGE onto its CALENDAR YEAR for the API", () => {
+    // The letter/gallery endpoints take `year=2026`, never `year=1`.
+    expect(resolveExperienceParams("?edition=1").editionYear).toBe(2026);
+    expect(resolveExperienceParams("?edition=2").editionYear).toBe(2027);
+    expect(resolveExperienceParams("").editionYear).toBeNull();
+  });
+
+  it("an admin draft preview never sends a public edition year", () => {
+    expect(resolveExperienceParams("?preview=1&age=3").editionAge).toBeNull();
+    expect(resolveExperienceParams("?preview=1&age=3").editionYear).toBeNull();
+  });
+
+  it("an explicit age wins over the edition it accompanies", () => {
+    const plan = resolveExperienceParams("?edition=2&age=3");
+    expect(plan).toMatchObject({ editionAge: 2, age: 3 });
+  });
+
+  it("keeps only an in-registry edition age", () => {
+    for (const bad of ["0", "18", "99", "-1", "abc", "1.5", ""]) {
+      expect(resolveExperienceParams(`?edition=${bad}`).editionAge).toBeNull();
+    }
+    expect(resolveExperienceParams("?edition=17").editionAge).toBe(17);
   });
 });

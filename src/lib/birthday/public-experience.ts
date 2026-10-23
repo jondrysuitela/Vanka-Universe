@@ -86,9 +86,11 @@ export async function loadPublicExperience(
   fetcher: FetchLike,
   options: { year?: number } = {},
 ): Promise<PublicExperience> {
+  // Both reads ask for the SAME cycle: a replayed edition must never show one
+  // year's letter beside another year's photos.
   const [letterResult, galleryResult] = await Promise.all([
     loadBirthdayLetter(fetcher, options.year),
-    loadBirthdayGallery(fetcher, false),
+    loadBirthdayGallery(fetcher, false, options.year),
   ]);
 
   // --- letter -------------------------------------------------------------

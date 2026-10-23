@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
+import GlitterBurst from "./GlitterBurst";
 import LetterScene, { type LetterDraft, type LetterThumbnail } from "./LetterScene";
 import type { GalleryItem } from "@/lib/birthday/gallery/client-sync";
 import { mediaUrlFor } from "@/lib/birthday/experience-media";
@@ -466,6 +467,10 @@ function MemoryBox({
 
   return (
     <div className="flex w-full flex-col items-center gap-8">
+      {/* Full-screen glitter while the memory box opens, matching the gift box
+          and the letter envelope. */}
+      <GlitterBurst active={opening} durationMs={reduce ? 400 : 1500} seed={0x4b454e41} count={120} />
+
       <div className="flex flex-col items-center gap-3 text-center">
         <span className="font-sans text-[0.7rem] font-semibold uppercase tracking-[0.45em] text-[#e9c67c]">
           Kotak Kenangan

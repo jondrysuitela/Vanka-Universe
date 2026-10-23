@@ -76,10 +76,12 @@ function isGalleryData(value: unknown): value is BirthdayGalleryData {
 export async function loadBirthdayGallery(
   fetcher: FetchLike,
   preview: boolean,
+  /** Cycle year (full year, e.g. 2026). Omitted = the endpoint's default cycle. */
+  year?: number,
 ): Promise<GalleryLoadResult> {
   let res: Response;
   try {
-    res = await fetcher(galleryUrl(preview), { headers: { accept: "application/json" } });
+    res = await fetcher(galleryUrl(preview, year), { headers: { accept: "application/json" } });
   } catch {
     return { status: "unavailable" };
   }

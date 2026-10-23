@@ -182,7 +182,13 @@ export default function AdminContentPage() {
                   // Private endpoint; next/image cannot attach the session cookie
                   // through the optimizer, so <img> is used.
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={`/api/media/${item.id}`} alt={item.title ?? item.name} className="h-full w-full object-cover" />
+                  <img
+                    src={`/api/media/${item.id}`}
+                    alt={item.title ?? item.name}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
                   <video
                     src={`/api/media/${item.id}`}

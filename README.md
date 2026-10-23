@@ -7,8 +7,9 @@ kosmik, pengalaman sinematik ulang tahun, Arsip Privat yang dilindungi PIN, dan
 panel admin untuk mengelola media, kenangan, surat, dan galeri.
 
 Tiga babnya: **Birthday Experience** (pengalaman ulang tahun pertama),
-**Memory Archive** (halaman status, belum storing apa pun), dan **Arsip Privat**
-(ruang keluarga yang dibuka dengan PIN).
+**Memory Archive** (satu bab per ulang tahun, dapat diputar ulang oleh publik
+mulai hari setelah ulang tahunnya), dan **Arsip Privat** (ruang keluarga yang
+dibuka dengan PIN).
 
 ## Stack
 

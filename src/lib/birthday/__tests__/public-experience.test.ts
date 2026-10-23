@@ -143,4 +143,22 @@ describe("loadPublicExperience", () => {
     expect(result.letterUnavailable).toBe(true);
     expect(result.galleryUnavailable).toBe(true);
   });
+
+  it("asks BOTH endpoints for the same replayed edition year", async () => {
+    const fetcher = fetcherFor();
+    await loadPublicExperience(fetcher, { year: 2027 });
+
+    const urls = fetcher.mock.calls.map((call) => String(call[0]));
+    expect(urls).toContain("/api/birthday/letter?year=2027");
+    expect(urls).toContain("/api/birthday/gallery?year=2027");
+  });
+
+  it("uses each endpoint's default cycle when no year is given", async () => {
+    const fetcher = fetcherFor();
+    await loadPublicExperience(fetcher);
+
+    const urls = fetcher.mock.calls.map((call) => String(call[0]));
+    expect(urls).toContain("/api/birthday/letter");
+    expect(urls).toContain("/api/birthday/gallery");
+  });
 });

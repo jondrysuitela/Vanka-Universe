@@ -4,10 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import CosmicBackdrop from "@/components/CosmicBackdrop";
+import BirthdayOverlay from "@/components/birthday/BirthdayOverlay";
 import {
   FIRST_EXPERIENCE_OPEN_LABEL,
-  isFirstExperienceOpen,
+  birthdayDayCycle,
+  publicExperiencePhase,
+  type PublicExperiencePhase,
 } from "@/lib/birthday/experience-open";
+import type { BirthdayCycle } from "@/lib/birthday/cycle";
 
 type Chapter = {
   eyebrow: string;
@@ -66,9 +70,9 @@ const CHAPTERS: readonly Chapter[] = [
     glow: "shadow-[0_0_26px_-14px_rgba(139,92,246,0.6)] hover:shadow-[0_0_48px_-10px_rgba(139,92,246,0.75)] focus-visible:shadow-[0_0_48px_-10px_rgba(139,92,246,0.75)]",
   },
   {
-    eyebrow: "Chapter Two · In preparation",
+    eyebrow: "Chapter Two · A chapter for every year",
     title: "Memory Archive",
-    body: "A quiet home for every moment worth remembering — photos, notes, and milestones. This chapter is still being prepared: nothing is stored yet and no upload is connected.",
+    body: "Every birthday Vanka has had, kept year by year — each one replayable in its own theme once its own birthday has passed. The first chapter opens on 27 October 2026.",
     cta: "Visit the Memory Archive",
     href: "/memory-archive",
     locked: false,
@@ -90,23 +94,35 @@ const CHAPTERS: readonly Chapter[] = [
 /** Copy shown on the closed experience card / announcement. */
 const GATED_BADGE = `Terbuka ${FIRST_EXPERIENCE_OPEN_LABEL}`;
 const GATED_NOTICE = `Vanka Experience akan terbuka pada ${FIRST_EXPERIENCE_OPEN_LABEL}. Sampai saat itu, ceritanya masih dijaga.`;
+/** Badge on the card on the birthday itself, when the overlay can be re-opened. */
+const OPEN_BADGE = "Hari ini · Ulang tahun Vanka";
 
 export default function Home() {
   const reducedMotion = useReducedMotion();
   /**
-   * Whether the public experience is open yet.
-   *
-   * `null` until the browser clock has been read in an effect: the server has no
-   * visitor clock and rendering the date check during SSR would mismatch on
-   * hydration. A closed card is what everyone sees first; visitors after the
-   * reveal get the working link a frame later.
+   * Which public phase the visitor is in — `null` until the browser clock has
+   * been read in an effect (the server has no visitor clock, so checking the
+   * date during SSR would mismatch on hydration). Until then the closed card is
+   * shown, which is also the correct state for every visitor before 27 October.
    */
-  const [experienceOpen, setExperienceOpen] = useState<boolean | null>(null);
+  const [phase, setPhase] = useState<PublicExperiencePhase | null>(null);
+  /**
+   * The cycle being celebrated TODAY (only on the birthday itself), and whether
+   * its overlay is currently open. Keeping them apart is what lets a visitor
+   * close the overlay and re-open it from the chapter card later that day.
+   */
+  const [todayCycle, setTodayCycle] = useState<BirthdayCycle | null>(null);
+  const [overlayOpen, setOverlayOpen] = useState(false);
   const [showGateNotice, setShowGateNotice] = useState(false);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      setExperienceOpen(isFirstExperienceOpen(new Date()));
+      const now = new Date();
+      setPhase(publicExperiencePhase(now));
+      // On the birthday itself the overlay is what a visitor meets first.
+      const celebrating = birthdayDayCycle(now);
+      setTodayCycle(celebrating);
+      setOverlayOpen(celebrating !== null);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -276,11 +292,14 @@ export default function Home() {
 
           <div className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {CHAPTERS.map((chapter) => {
-              // A gated chapter is never a link before its reveal date: the card
-              // becomes a button that only announces when the experience opens.
-              // One frame is needed to read the browser clock, so during SSR and
-              // the first paint (`null`) the same closed card is shown.
-              const closed = chapter.gated && experienceOpen !== true;
+              // The Vanka Experience card has three states:
+              //  - closed     → before the birthday: a button that only says when
+              //                 it opens (also what SSR/first paint shows).
+              //  - openable   → on the birthday itself: clicking re-opens the
+              //                 same overlay in place.
+              //  - plain link → from the next day on (and every other chapter).
+              const closed = chapter.gated && (phase === null || phase === "before");
+              const openable = chapter.gated && phase === "birthday";
               const cardClass = `group backdrop-blur-glass flex h-full flex-col gap-5 rounded-3xl p-8 text-left transition duration-300 motion-reduce:transition-none hover:-translate-y-1.5 hover:border-[#e9c67c]/60 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c] sm:p-10 ${chapter.glow}`;
 
               const content = (
@@ -309,8 +328,17 @@ export default function Home() {
                       {GATED_BADGE}
                     </span>
                   )}
+                  {openable && (
+                    <span className="inline-flex w-fit items-center rounded-full border border-[#e9c67c]/45 bg-[#0b1226]/70 px-3 py-1 font-sans text-[0.6rem] font-semibold uppercase tracking-[0.28em] text-[#f6e3b2]">
+                      {OPEN_BADGE}
+                    </span>
+                  )}
                   <span className="mt-auto flex items-center gap-2 font-sans text-xs font-bold uppercase tracking-[0.22em] text-white/85 transition group-hover:text-[#f6e3b2]">
-                    {closed ? "Lihat tanggal terbuka" : chapter.cta}
+                    {closed
+                      ? "Lihat tanggal terbuka"
+                      : openable
+                        ? "Putar Vanka Experience"
+                        : chapter.cta}
                     <span
                       aria-hidden="true"
                       className="transition duration-300 group-hover:translate-x-1"
@@ -321,17 +349,35 @@ export default function Home() {
                 </>
               );
 
-              return closed ? (
-                <button
-                  key={chapter.href}
-                  type="button"
-                  onClick={() => setShowGateNotice(true)}
-                  aria-haspopup="dialog"
-                  className={cardClass}
-                >
-                  {content}
-                </button>
-              ) : (
+              if (closed) {
+                return (
+                  <button
+                    key={chapter.href}
+                    type="button"
+                    onClick={() => setShowGateNotice(true)}
+                    aria-haspopup="dialog"
+                    className={cardClass}
+                  >
+                    {content}
+                  </button>
+                );
+              }
+
+              if (openable) {
+                return (
+                  <button
+                    key={chapter.href}
+                    type="button"
+                    onClick={() => setOverlayOpen(true)}
+                    aria-haspopup="dialog"
+                    className={cardClass}
+                  >
+                    {content}
+                  </button>
+                );
+              }
+
+              return (
                 <Link key={chapter.href} href={chapter.href} className={cardClass}>
                   {content}
                 </Link>
@@ -430,6 +476,20 @@ export default function Home() {
             </button>
           </div>
         </div>
+      )}
+
+      {/*
+        On the birthday ITSELF the experience covers the landing page. It is the
+        same player as the Memory Archive replay, only rendered full-screen over
+        the dashboard. Closing it reveals the dashboard; the chapter card can
+        re-open it for the rest of the day.
+      */}
+      {todayCycle !== null && overlayOpen && (
+        <BirthdayOverlay
+          editionAge={todayCycle.age}
+          editionYear={todayCycle.year}
+          onClose={() => setOverlayOpen(false)}
+        />
       )}
     </main>
   );

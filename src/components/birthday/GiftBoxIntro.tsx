@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
+import GlitterBurst from "./GlitterBurst";
+
 interface GiftBoxIntroProps {
   onOpen: () => void;
 }
@@ -35,6 +37,13 @@ export default function GiftBoxIntro({ onOpen }: GiftBoxIntroProps) {
 
   return (
     <section className="relative z-10 mx-auto flex min-h-dvh w-full max-w-3xl flex-col items-center justify-center gap-10 px-6 py-20 text-center">
+      {/*
+        Full-screen glitter while the box opens. It plays for exactly as long as
+        the box takes to open, so the scene change happens inside the burst
+        instead of on a visible cut.
+      */}
+      <GlitterBurst active={opening} durationMs={reduce ? 400 : 1700} count={130} />
+
       {/* Gift box illustration (decorative) */}
       <div aria-hidden="true" className="relative">
         <motion.div

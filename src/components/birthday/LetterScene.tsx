@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
+import GlitterBurst from "./GlitterBurst";
+
 /**
  * Letter from Ayah — data model + cinematic multi-section reader.
  *
@@ -378,6 +380,12 @@ export default function LetterScene({ draft, preview = false, onFinish }: Letter
 
   return (
     <div className="flex w-full flex-col items-center gap-8">
+      {/*
+        Full-screen glitter while the envelope opens — the same transition as the
+        gift box, so the two openings feel like one language.
+      */}
+      <GlitterBurst active={opening} durationMs={reduce ? 350 : 1100} seed={0x4c455454} count={110} />
+
       <div className="flex flex-col items-center gap-3 text-center">
         <span className="font-sans text-[0.7rem] font-semibold uppercase tracking-[0.45em] text-[#e9c67c]">
           Surat dari Ayah

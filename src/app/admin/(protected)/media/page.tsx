@@ -12,6 +12,7 @@ import { useToast } from "@/components/admin/ui/ToastProvider";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import { cycleContainingUpload, isCycleRevealed } from "@/lib/birthday/cycle";
 import { saveLetterEnsuringEdition } from "@/lib/birthday/letter-sync";
+import { compressForUpload, describeSavings } from "@/lib/media/compress";
 
 /**
  * Pustaka Media — upload photos/videos to the private local server store.
@@ -211,8 +212,13 @@ export default function AdminMediaPage() {
     setSaving(true);
     setSaveError(null);
     try {
+      // Shrink photos in the browser first: a camera-sized JPEG becomes a
+      // modest, still-sharp file, so every grid that renders it stays light.
+      // Videos and GIFs pass through unchanged (see `lib/media/compress.ts`).
+      const shrunk = await compressForUpload(selected.file, selected.kind);
+
       const form = new FormData();
-      form.append("file", selected.file, selected.name);
+      form.append("file", shrunk.file, shrunk.file.name);
       form.append("title", uploadTitle);
       form.append("description", uploadDescription);
       const res = await fetch("/api/media", {
@@ -229,9 +235,12 @@ export default function AdminMediaPage() {
       }
       setSaved((prev) => [body.data as SavedMedia, ...prev]);
       clearSelection();
+      const savings = describeSavings(shrunk);
       showToast({
         title: "Tersimpan",
-        message: "File tersimpan di penyimpanan aman (R2).",
+        message: savings
+          ? `File tersimpan di penyimpanan aman (R2) · dikompres ${savings}.`
+          : "File tersimpan di penyimpanan aman (R2).",
         type: "success",
       });
     } catch {
@@ -515,11 +524,16 @@ export default function AdminMediaPage() {
                 <div className="aspect-video bg-black/40 flex items-center justify-center">
                   {item.kind === "image" ? (
                     // Private endpoint; next/image cannot attach the session
-                    // cookie through the optimizer, so <img> is used.
+                    // cookie through the optimizer, so <img> is used. The card
+                    // decodes/renders at its own size (no `sizes`-less full
+                    // resolution paint) and is lazy so a long library does not
+                    // download everything at once.
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={`/api/media/${item.id}`}
-                      alt={item.name}
+                      alt={item.title?.trim() || item.name}
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover"
                     />
                   ) : (

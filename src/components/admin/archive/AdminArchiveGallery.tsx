@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import { useToast } from "@/components/admin/ui/ToastProvider";
+import { compressForUpload, describeSavings } from "@/lib/media/compress";
 import {
   EMPTY_GALLERY_STATE,
   addPhoto,
@@ -222,8 +223,12 @@ export default function AdminArchiveGallery() {
     setUploading(true);
     setUploadError(null);
     try {
+      // Shrink photos in the browser first (videos and GIFs pass through), so
+      // the archive renders modest files instead of camera-sized originals.
+      const shrunk = await compressForUpload(uploadSelected.file, uploadSelected.kind);
+
       const form = new FormData();
-      form.append("file", uploadSelected.file, uploadSelected.name);
+      form.append("file", shrunk.file, shrunk.file.name);
       // Pool tag: Arsip Ibu. Keeps this file out of the birthday gallery.
       form.append("collection", "archive");
       const res = await fetch("/api/media", {
@@ -241,9 +246,12 @@ export default function AdminArchiveGallery() {
       const url = uploadSelected.url;
       URL.revokeObjectURL(url);
       clearUploadSelection();
+      const savings = describeSavings(shrunk);
       showToast({
         title: "Tersimpan",
-        message: "File tersimpan di pool Arsip Ibu (tidak masuk galeri ulang tahun).",
+        message: savings
+          ? `File tersimpan di pool Arsip Ibu (dikompres ${savings}).`
+          : "File tersimpan di pool Arsip Ibu (tidak masuk galeri ulang tahun).",
         type: "success",
       });
       await refreshMedia();
@@ -406,6 +414,7 @@ export default function AdminArchiveGallery() {
                     <img
                       src={uploadSelected.url}
                       alt={`Pratinjau gambar ${uploadSelected.name}`}
+                      decoding="async"
                       className="max-h-80 w-auto object-contain"
                     />
                   ) : (
@@ -579,6 +588,8 @@ export default function AdminArchiveGallery() {
                     <img
                       src={`/api/media/${image.id}`}
                       alt={image.name}
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover"
                     />
                   </div>
@@ -633,6 +644,8 @@ export default function AdminArchiveGallery() {
                     <img
                       src={`/api/media/${photo.mediaId}`}
                       alt={media?.name ?? "Foto galeri"}
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover"
                     />
                   </div>

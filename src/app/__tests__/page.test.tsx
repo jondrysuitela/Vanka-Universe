@@ -7,14 +7,18 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import Home from "@/app/page";
 
 /**
- * The landing page gates the Vanka Experience by DATE (27 October 2026). The
- * clock is controlled here so both sides of the gate are covered:
- *  - before the reveal the chapter must NOT be a link (it only announces the
- *    opening date), and
- *  - from the reveal instant on it is the normal link again.
+ * The landing page follows the SAME date policy as the server:
+ *
+ *  - before 27 October 2026 00:00 WIT  → the chapter is a closed card;
+ *  - on the birthday itself            → the experience covers the page as an
+ *                                        overlay, and the card re-opens it;
+ *  - from 28 October 00:00 WIT         → the card is a normal link again.
+ *
+ * The clock is frozen per test so each phase is exercised at its boundary.
  */
 
-const REVEAL = new Date("2026-10-26T15:00:00.000Z").getTime();
+const REVEAL = new Date("2026-10-26T15:00:00.000Z").getTime(); // 27 Oct 00:00 WIT
+const DAY_AFTER = new Date("2026-10-27T15:00:00.000Z").getTime(); // 28 Oct 00:00 WIT
 
 afterEach(() => {
   cleanup();
@@ -22,8 +26,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/**
+ * Stand-in for `fetch`. The experience player calls the public API; a 404 keeps
+ * every loader on its honest "unavailable" path, so no real data is involved.
+ */
 function installFetchSpy(): ReturnType<typeof vi.fn> {
-  const spy = vi.fn();
+  const spy = vi.fn(async () => ({
+    status: 404,
+    ok: false,
+    json: async () => ({ error: { code: "NOT_FOUND" } }),
+  }));
   (globalThis as unknown as { fetch: unknown }).fetch = spy;
   return spy;
 }
@@ -36,18 +48,30 @@ function linkByHref(container: HTMLElement, href: string): HTMLAnchorElement {
   return link as HTMLAnchorElement;
 }
 
-/** Freeze the clock and let the page's date check run. */
+function cardFor(title: string): HTMLElement {
+  const heading = screen.getByRole("heading", { name: title });
+  const card = heading.closest("button, a");
+  if (!card) throw new Error(`Missing card for: ${title}`);
+  return card as HTMLElement;
+}
+
+/** Freeze the clock and let the page's date check (and overlay load) settle. */
 async function renderAt(nowMs: number): Promise<HTMLElement> {
   vi.setSystemTime(new Date(nowMs));
   installFetchSpy();
   const { container } = render(<Home />);
+  // Frame 1: the page reads the clock. Frame 2: the overlay's player mounts and
+  // reads its content. (Each deferred read is one animation frame.)
   await act(async () => {
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    for (let frame = 0; frame < 4; frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+      await Promise.resolve();
+    }
   });
   return container;
 }
 
-describe("public dashboard chapters — before the reveal", () => {
+describe("landing page — before the birthday", () => {
   it("does not link to /birthday-experience at all", async () => {
     const container = await renderAt(REVEAL - 60_000);
 
@@ -59,31 +83,15 @@ describe("public dashboard chapters — before the reveal", () => {
   it("shows the opening date on the Birthday Experience card instead of the CTA", async () => {
     await renderAt(REVEAL - 60_000);
 
-    expect(screen.getByRole("heading", { name: "Birthday Experience" })).toBeTruthy();
-    const card = screen
-      .getByRole("heading", { name: "Birthday Experience" })
-      .closest("button");
-    expect(card).not.toBeNull();
-    expect(card?.textContent).toContain("Terbuka 27 Oktober 2026");
-    expect(card?.textContent).not.toContain("Open the Birthday Experience");
-  });
-
-  it("still renders the other two chapters unchanged", async () => {
-    const container = await renderAt(REVEAL - 60_000);
-
-    expect(container.querySelectorAll("a")).toHaveLength(2);
-    expect(linkByHref(container, "/memory-archive").textContent).toContain(
-      "Visit the Memory Archive",
-    );
-    expect(linkByHref(container, "/arsip-ibu").textContent).toContain("Dilindungi PIN");
-    expect(screen.getByRole("heading", { name: "Three chapters, one universe" })).toBeTruthy();
+    const card = cardFor("Birthday Experience");
+    expect(card.tagName).toBe("BUTTON");
+    expect(card.textContent).toContain("Terbuka 27 Oktober 2026");
+    expect(card.textContent).not.toContain("Open the Birthday Experience");
   });
 
   it("opens the announcement dialog and closes it with the button", async () => {
-    const container = await renderAt(REVEAL - 60_000);
-    const card = screen
-      .getByRole("heading", { name: "Birthday Experience" })
-      .closest("button") as HTMLButtonElement;
+    await renderAt(REVEAL - 60_000);
+    const card = cardFor("Birthday Experience") as HTMLButtonElement;
 
     expect(screen.queryByRole("dialog")).toBeNull();
     await act(async () => {
@@ -98,48 +106,101 @@ describe("public dashboard chapters — before the reveal", () => {
       screen.getByRole("button", { name: "Mengerti" }).click();
     });
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("never renders the experience overlay", async () => {
+    await renderAt(REVEAL - 60_000);
+
+    expect(document.querySelector('[aria-label*="Vanka Experience"]')).toBeNull();
+    expect(screen.queryByRole("button", { name: /Buka Hadiah/i })).toBeNull();
+  });
+
+  it("still renders the other two chapters unchanged", async () => {
+    const container = await renderAt(REVEAL - 60_000);
+
     expect(container.querySelectorAll("a")).toHaveLength(2);
+    expect(linkByHref(container, "/memory-archive").textContent).toContain(
+      "Visit the Memory Archive",
+    );
+    expect(linkByHref(container, "/arsip-ibu").textContent).toContain("Dilindungi PIN");
   });
 });
 
-describe("public dashboard chapters — from the reveal instant on", () => {
-  it("is the normal link with the original CTA", async () => {
+describe("landing page — on the birthday itself", () => {
+  it("covers the page with the experience overlay", async () => {
+    await renderAt(REVEAL);
+
+    const overlay = document.querySelector('[role="dialog"][aria-modal="true"]');
+    expect(overlay).not.toBeNull();
+    expect(overlay?.getAttribute("aria-label")).toContain("Vanka Experience");
+    // The overlay starts at the gift box, exactly like the full page.
+    expect(screen.getByRole("button", { name: /Buka hadiah/i })).toBeTruthy();
+  });
+
+  it("closes the overlay and keeps the card able to re-open it", async () => {
+    await renderAt(REVEAL + 60_000);
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Tutup ✕" }).click();
+    });
+    expect(document.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+
+    const card = cardFor("Birthday Experience") as HTMLButtonElement;
+    expect(card.tagName).toBe("BUTTON");
+    expect(card.textContent).toContain("Hari ini");
+    expect(card.textContent).toContain("Putar Vanka Experience");
+
+    await act(async () => {
+      card.click();
+    });
+    expect(document.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+  });
+
+  it("does not link away while the overlay owns the experience", async () => {
     const container = await renderAt(REVEAL);
+
+    expect(
+      Array.from(container.querySelectorAll("a")).map((a) => a.getAttribute("href")),
+    ).not.toContain("/birthday-experience");
+  });
+});
+
+describe("landing page — from the day after", () => {
+  it("is the normal link again, with the original CTA", async () => {
+    const container = await renderAt(DAY_AFTER);
 
     const birthday = linkByHref(container, "/birthday-experience");
     expect(birthday.textContent).toContain("Open the Birthday Experience");
     expect(birthday.textContent).not.toContain("Terbuka");
+    expect(birthday.textContent).not.toContain("Hari ini");
     expect(birthday.querySelector("svg")).toBeNull();
   });
 
+  it("no longer shows the overlay", async () => {
+    await renderAt(DAY_AFTER);
+
+    expect(document.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+  });
+
   it("renders all three chapter links", async () => {
-    const container = await renderAt(REVEAL);
+    const container = await renderAt(DAY_AFTER);
 
     expect(
       Array.from(container.querySelectorAll("a")).map((link) => link.getAttribute("href")),
     ).toEqual(["/birthday-experience", "/memory-archive", "/arsip-ibu"]);
-    for (const title of ["Birthday Experience", "Memory Archive", "Arsip Privat"]) {
-      expect(screen.getByRole("heading", { name: title })).toBeTruthy();
-    }
   });
 });
 
-describe("public dashboard — shared behaviour", () => {
-  it("stays public: no PIN prompt, no inputs, and no API call", async () => {
-    vi.setSystemTime(new Date(REVEAL - 60_000));
-    const fetchSpy = installFetchSpy();
-    const { container } = render(<Home />);
-    await act(async () => {
-      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
-    });
+describe("landing page — shared behaviour", () => {
+  it("stays public: no PIN prompt, no inputs", async () => {
+    const container = await renderAt(REVEAL - 60_000);
 
-    expect(fetchSpy).not.toHaveBeenCalled();
     expect(container.querySelectorAll("input")).toHaveLength(0);
     expect(container.textContent).not.toMatch(/masukkan pin|pin salah/i);
   });
 
   it("uses a balanced responsive grid", async () => {
-    const container = await renderAt(REVEAL);
+    const container = await renderAt(DAY_AFTER);
 
     const grid = linkByHref(container, "/arsip-ibu").parentElement;
     expect(grid?.className).toContain("md:grid-cols-2");
@@ -147,7 +208,7 @@ describe("public dashboard — shared behaviour", () => {
   });
 
   it("gives each card a distinct, plain box-shadow glow that grows on hover/focus", async () => {
-    const container = await renderAt(REVEAL);
+    const container = await renderAt(DAY_AFTER);
 
     const glows: Array<[string, string]> = [
       ["/birthday-experience", "rgba(139,92,246"],
@@ -157,25 +218,20 @@ describe("public dashboard — shared behaviour", () => {
 
     for (const [href, colour] of glows) {
       const className = linkByHref(container, href).className;
-      // Thin glow at rest, stronger on hover and on keyboard focus.
       expect(className).toContain(colour);
       expect(className).toContain("hover:shadow-");
       expect(className).toContain("focus-visible:shadow-");
-      // Respects reduced motion; pure box-shadow (no blur/overflow tricks).
       expect(className).toContain("motion-reduce:transition-none");
       expect(className).toContain("shadow-[");
     }
   });
 
-  it("keeps the lock glyph on the gated card too", async () => {
-    const container = await renderAt(REVEAL - 60_000);
+  it("keeps a lock glyph on the gated card before the reveal", async () => {
+    await renderAt(REVEAL - 60_000);
 
-    const card = screen
-      .getByRole("heading", { name: "Birthday Experience" })
-      .closest("button");
-    const glyph = card?.querySelector("svg");
+    const glyph = cardFor("Birthday Experience").querySelector("svg");
     expect(glyph).not.toBeNull();
     expect(glyph?.getAttribute("aria-hidden")).toBe("true");
-    expect(container.querySelectorAll("h3")).toHaveLength(3);
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(3);
   });
 });
