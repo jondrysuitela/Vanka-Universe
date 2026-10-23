@@ -25,14 +25,36 @@
 
 export type CompressibleKind = "image" | "video";
 
-/** Longest allowed edge after shrinking. 2560 px keeps 1440p-wide views sharp. */
-export const MAX_EDGE_PX = 2560;
+/**
+ * Longest allowed edge after shrinking.
+ *
+ * SIZED FOR THE ACTUAL RENDER, not for a 1440p desktop. No photo in the app is
+ * drawn wider than the memory-box frame / letter opener (~382 CSS px at a 2×
+ * device pixel ratio ≈ 766 px); the old 2560 px cap left files several times
+ * larger than anything that reaches the screen, which is exactly what made
+ * sliding between photos stutter. 1600 px still leaves headroom for a full-width
+ * view on a large display while cutting bytes sharply.
+ */
+export const MAX_EDGE_PX = 1600;
 
-/** Re-encode quality (0–1). 0.86 is visually lossless at these sizes. */
-export const QUALITY = 0.86;
+/**
+ * Re-encode quality (0–1).
+ *
+ * 0.82 is the point where the downscale still looks clean at display size but a
+ * JPEG stops carrying detail the screen never shows. Paired with the smaller
+ * cap below this is a large byte cut, not a small one.
+ */
+export const QUALITY = 0.82;
 
-/** Images below this are already cheap to render; leave them untouched. */
-export const SKIP_BELOW_BYTES = 400 * 1024;
+/**
+ * Images at or below this are already cheap to render; leave them untouched.
+ *
+ * Lowered from 400 KB: the gallery now draws at most ~766 device px, so a
+ * 300 KB photo can still be a 2400 px source — exactly the case that stalls a
+ * slide. Over-resolved files are now re-sampled even when their bytes look
+ * modest.
+ */
+export const SKIP_BELOW_BYTES = 200 * 1024;
 
 /** Never upscale, and never return something larger than the original. */
 export function scaledDimensions(
@@ -91,16 +113,22 @@ export async function compressImageFile(
   const unchanged: CompressResult = { file, compressed: false, originalBytes };
 
   if (typeof document === "undefined") return unchanged;
-  if (!shouldCompressImage(file)) return unchanged;
 
   const maxEdge = options.maxEdge ?? MAX_EDGE_PX;
   const quality = options.quality ?? QUALITY;
 
+  // The byte gate is only a cheap early-out for SMALL files; a big file may
+  // still be too over-resolved to skip, so the real decision is made after we
+  // know the pixel dimensions below.
+  if (file.type === "image/gif") return unchanged;
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return unchanged;
+
   try {
     const bitmap = await createImageBitmap(file);
     const { width, height } = scaledDimensions(bitmap.width, bitmap.height, maxEdge);
-    // Already small enough AND small in bytes: keep the original bytes.
-    if (width === bitmap.width && height === bitmap.height && file.size <= SKIP_BELOW_BYTES) {
+    const needsResize = width !== bitmap.width || height !== bitmap.height;
+    // Fits the cap AND already small in bytes: keep the original bytes.
+    if (!needsResize && file.size <= SKIP_BELOW_BYTES) {
       bitmap.close();
       return unchanged;
     }
