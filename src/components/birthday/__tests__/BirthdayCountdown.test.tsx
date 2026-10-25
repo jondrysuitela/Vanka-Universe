@@ -49,10 +49,12 @@ describe("BirthdayCountdown", () => {
     expect(screen.getByText(/Selamat Ulang Tahun/)).toBeTruthy();
     expect(screen.getByText("27 Oktober · 00.00 WIT")).toBeTruthy();
     expect(container.querySelectorAll('path[fill="#ffd36e"]')).toHaveLength(0);
+    expect(screen.queryByTestId("birthday-ambient-celebration")).toBeNull();
 
     act(() => {
       vi.advanceTimersByTime(BIRTHDAY_CELEBRATION_MS);
     });
+    expect(screen.getByTestId("birthday-ambient-celebration").getAttribute("aria-hidden")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Buka Kado Vanka" }));
     expect(onOpenGift).toHaveBeenCalledOnce();
   });
