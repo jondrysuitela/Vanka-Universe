@@ -127,6 +127,16 @@ describe("landing page — before the birthday", () => {
 });
 
 describe("landing page — on the birthday itself", () => {
+  it("starts the fifteen-second birthday countdown before midnight WIT", async () => {
+    await renderAt(REVEAL - 15_000);
+
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Menuju ulang tahun Vanka" })).toBeTruthy();
+    expect(screen.getByText("00:15")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Buka Kado Vanka/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Buka hadiah/i })).toBeNull();
+  });
+
   it("covers the page with the experience overlay", async () => {
     await renderAt(REVEAL);
 

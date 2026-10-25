@@ -5,13 +5,16 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import CosmicBackdrop from "@/components/CosmicBackdrop";
 import BirthdayOverlay from "@/components/birthday/BirthdayOverlay";
+import BirthdayCountdown from "@/components/birthday/BirthdayCountdown";
+import { BIRTHDAY_COUNTDOWN_SECONDS } from "@/lib/birthday/countdown";
 import {
+  FIRST_EXPERIENCE_YEAR,
   FIRST_EXPERIENCE_OPEN_LABEL,
   birthdayDayCycle,
   publicExperiencePhase,
   type PublicExperiencePhase,
 } from "@/lib/birthday/experience-open";
-import type { BirthdayCycle } from "@/lib/birthday/cycle";
+import { cycleWindowForYear, type BirthdayCycle } from "@/lib/birthday/cycle";
 
 type Chapter = {
   eyebrow: string;
@@ -114,18 +117,64 @@ export default function Home() {
   const [todayCycle, setTodayCycle] = useState<BirthdayCycle | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [showGateNotice, setShowGateNotice] = useState(false);
+  const [countdownNow, setCountdownNow] = useState<number | null>(null);
+  const [countdownStarted, setCountdownStarted] = useState(false);
+  const [countdownDismissed, setCountdownDismissed] = useState(false);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
+    const revealAt = cycleWindowForYear(FIRST_EXPERIENCE_YEAR)?.revealAt.getTime();
+    if (revealAt === undefined) return;
+
+    let timer: number | null = null;
+    let initial = true;
+    const countdownWindowMs = BIRTHDAY_COUNTDOWN_SECONDS * 1000;
+
+    const update = () => {
       const now = new Date();
-      setPhase(publicExperiencePhase(now));
-      // On the birthday itself the overlay is what a visitor meets first.
+      const nowMs = now.getTime();
       const celebrating = birthdayDayCycle(now);
+      const remaining = revealAt - nowMs;
+
+      setCountdownNow(nowMs);
+      setPhase(publicExperiencePhase(now));
       setTodayCycle(celebrating);
-      setOverlayOpen(celebrating !== null);
-    });
-    return () => cancelAnimationFrame(frame);
+      if (initial) {
+        // Keep the existing direct-open behaviour for visitors arriving on
+        // the birthday, while letting people who watched the countdown choose
+        // when to enter the experience.
+        setOverlayOpen(celebrating !== null);
+        initial = false;
+      }
+
+      if (remaining > 0 && remaining <= countdownWindowMs) {
+        setCountdownStarted(true);
+      }
+
+      if (remaining > countdownWindowMs) {
+        timer = window.setTimeout(update, remaining - countdownWindowMs);
+      } else if (remaining > 0) {
+        timer = window.setTimeout(update, Math.min(1000, remaining));
+      } else if (celebrating) {
+        timer = window.setTimeout(
+          update,
+          Math.max(100, celebrating.uploadEnd.getTime() - nowMs),
+        );
+      }
+    };
+
+    update();
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+    };
   }, []);
+
+  const revealAt = cycleWindowForYear(FIRST_EXPERIENCE_YEAR)?.revealAt.getTime() ?? null;
+  const countdownVisible =
+    countdownStarted &&
+    !countdownDismissed &&
+    countdownNow !== null &&
+    revealAt !== null &&
+    (countdownNow < revealAt || todayCycle?.year === FIRST_EXPERIENCE_YEAR);
 
   // Close the announcement with Escape, like any other dialog.
   useEffect(() => {
@@ -476,6 +525,17 @@ export default function Home() {
             </button>
           </div>
         </div>
+      )}
+
+      {countdownVisible && revealAt !== null && countdownNow !== null && (
+        <BirthdayCountdown
+          revealAt={revealAt}
+          now={countdownNow}
+          onOpenGift={() => {
+            setCountdownDismissed(true);
+            setOverlayOpen(true);
+          }}
+        />
       )}
 
       {/*

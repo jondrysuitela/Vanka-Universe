@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/admin/ui/ToastProvider";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
+import BirthdayCountdown from "@/components/birthday/BirthdayCountdown";
 import {
   DEFAULT_LETTER_DRAFT,
   DEFAULT_LETTER_THUMBNAIL,
@@ -17,6 +18,7 @@ import {
 } from "@/components/birthday/LetterScene";
 import { BIRTHDAY_THEMES, getThemeByAge } from "@/lib/birthday/theme-registry";
 import { isCycleRevealed } from "@/lib/birthday/cycle";
+import { BIRTHDAY_COUNTDOWN_SECONDS } from "@/lib/birthday/countdown";
 import {
   loadLetters,
   reconcileLetter,
@@ -86,6 +88,11 @@ export default function AdminBirthdayPage() {
   const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
   const [serverLetters, setServerLetters] = useState<Map<number, ServerLetter>>(new Map());
   const [savingToServer, setSavingToServer] = useState(false);
+  const [countdownPreview, setCountdownPreview] = useState<{
+    revealAt: number;
+    now: number;
+  } | null>(null);
+  const countdownPreviewOpen = countdownPreview !== null;
 
   // Published-by-date: an edition whose birthday has passed is FROZEN — the
   // server refuses further writes — so the editor must not offer a save that can
@@ -153,6 +160,16 @@ export default function AdminBirthdayPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!countdownPreviewOpen) return;
+    const timer = window.setInterval(() => {
+      setCountdownPreview((preview) =>
+        preview === null ? null : { ...preview, now: Date.now() },
+      );
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [countdownPreviewOpen]);
 
   function currentDraft(): LetterDraft {
     return {
@@ -300,6 +317,14 @@ export default function AdminBirthdayPage() {
     router.push(`/birthday-experience?preview=1&full=1&age=${selectedAge}`);
   }
 
+  function previewBirthdayCountdown() {
+    const now = Date.now();
+    setCountdownPreview({
+      now,
+      revealAt: now + BIRTHDAY_COUNTDOWN_SECONDS * 1000,
+    });
+  }
+
   function updateSection(id: string, patch: Partial<LetterSection>) {
     setLetterSections((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
   }
@@ -328,12 +353,23 @@ export default function AdminBirthdayPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-display tracking-widest text-[#fdf3d8]">Tulis Surat</h1>
-        <p className="text-sm text-[#fdf3d8]/70 mt-2">
-          Kelola satu surat untuk setiap edisi ulang tahun (usia 1–17). Draf selalu tersimpan lokal di
-          browser ini (localStorage); saat server tersedia, draf juga dapat dikirim ke server. Identitas
-          tema dibaca dari Katalog Tema Tahunan.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-display tracking-widest text-[#fdf3d8]">Tulis Surat</h1>
+            <p className="text-sm text-[#fdf3d8]/70 mt-2">
+              Kelola satu surat untuk setiap edisi ulang tahun (usia 1–17). Draf selalu tersimpan lokal di
+              browser ini (localStorage); saat server tersedia, draf juga dapat dikirim ke server. Identitas
+              tema dibaca dari Katalog Tema Tahunan.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={previewBirthdayCountdown}
+            className="shrink-0 rounded-lg border border-[#f6d77a]/45 bg-[#f6d77a]/10 px-5 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#f6d77a] transition hover:bg-[#f6d77a]/15 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c]"
+          >
+            Preview Countdown Ulang Tahun
+          </button>
+        </div>
         <p
           className={`mt-3 rounded-lg border px-4 py-3 text-xs ${
             statusNote.tone === "error"
@@ -750,6 +786,17 @@ export default function AdminBirthdayPage() {
         onConfirm={confirmDelete}
         onCancel={() => setOpenDelete(false)}
       />
+      {countdownPreview && (
+        <BirthdayCountdown
+          revealAt={countdownPreview.revealAt}
+          now={countdownPreview.now}
+          onClose={() => setCountdownPreview(null)}
+          onOpenGift={() => {
+            setCountdownPreview(null);
+            router.push("/birthday-experience?preview=1&full=1&age=1");
+          }}
+        />
+      )}
     </div>
   );
 }
