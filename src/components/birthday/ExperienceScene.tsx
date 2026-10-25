@@ -311,27 +311,35 @@ function GalleryFrame({
  */
 function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (id: string) => string }) {
   const [index, setIndex] = useState(0);
+  const [direction, setDirection] = useState(1);
   const reduce = useReducedMotion();
 
   const list = items.length > 0 ? items : [PLACEHOLDER_ITEM];
   const item = list[index % list.length];
-  const goPrev = () => setIndex((i) => (i - 1 + list.length) % list.length);
-  const goNext = () => setIndex((i) => (i + 1) % list.length);
-  const goTo = (i: number) => setIndex(i);
+  const goPrev = () => {
+    setDirection(-1);
+    setIndex((i) => (i - 1 + list.length) % list.length);
+  };
+  const goNext = () => {
+    setDirection(1);
+    setIndex((i) => (i + 1) % list.length);
+  };
+  const goTo = (nextIndex: number) => {
+    if (nextIndex === index) return;
+    setDirection(nextIndex > index ? 1 : -1);
+    setIndex(nextIndex);
+  };
 
-  /**
-   * CROSSFADE, not a slide.
-   *
-   * The outgoing and incoming photos overlap: the new one fades in while the
-   * old one is still fully visible. `mode="wait"` would empty the frame between
-   * them, which reads as a flicker; a slide also feeds a visible gap at the
-   * edge of the frame. A short scale settle (1.015 → 1) gives the incoming
-   * photo a gentle "arrival" without moving the frame layout.
-   */
-  const frameFade = {
-    initial: reduce ? { opacity: 0 } : { opacity: 0, scale: 1.015 },
-    animate: reduce ? { opacity: 1 } : { opacity: 1, scale: 1 },
-    exit: reduce ? { opacity: 0 } : { opacity: 0, scale: 1 },
+  const frameVariants = {
+    initial: (travel: number) =>
+      reduce
+        ? { opacity: 0 }
+        : { opacity: 0, scale: 0.94, x: travel * 42, rotateY: travel * 5 },
+    animate: reduce ? { opacity: 1 } : { opacity: 1, scale: 1, x: 0, rotateY: 0 },
+    exit: (travel: number) =>
+      reduce
+        ? { opacity: 0 }
+        : { opacity: 0, scale: 0.97, x: travel * -30, rotateY: travel * -4 },
   };
 
   return (
@@ -343,12 +351,17 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
         full width when the old one unmounts.
       */}
       <div className="grid w-full max-w-xs justify-items-center sm:max-w-sm">
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial={false} custom={direction}>
           <motion.div
             key={`${item.id}-${index}`}
-            {...frameFade}
-            transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: "easeInOut" }}
-            className="col-start-1 row-start-1 flex w-full justify-center"
+            custom={direction}
+            variants={frameVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: [0.22, 1, 0.36, 1] }}
+            className="relative col-start-1 row-start-1 flex w-full justify-center overflow-hidden rounded-3xl"
+            style={{ transformPerspective: 1200 }}
           >
             <GalleryFrame
               item={item}
@@ -365,6 +378,20 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                 </figcaption>
               }
             />
+            {!reduce && (
+              <motion.span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 z-10"
+                style={{
+                  background:
+                    "linear-gradient(108deg, transparent 32%, rgba(246,215,122,0.18) 43%, rgba(255,248,220,0.62) 50%, rgba(246,215,122,0.18) 57%, transparent 68%)",
+                  mixBlendMode: "screen",
+                }}
+                initial={{ x: "-120%", opacity: 0 }}
+                animate={{ x: "120%", opacity: [0, 0.75, 0] }}
+                transition={{ duration: 0.95, ease: "easeInOut" }}
+              />
+            )}
           </motion.div>
         </AnimatePresence>
       </div>

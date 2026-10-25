@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/admin/ui/ToastProvider";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
-import BirthdayCountdown from "@/components/birthday/BirthdayCountdown";
 import {
   DEFAULT_LETTER_DRAFT,
   DEFAULT_LETTER_THUMBNAIL,
@@ -15,10 +14,10 @@ import {
   listSavedLetterAges,
   type LetterDraft,
   type LetterSection,
+  type LetterThumbnail,
 } from "@/components/birthday/LetterScene";
 import { BIRTHDAY_THEMES, getThemeByAge } from "@/lib/birthday/theme-registry";
 import { isCycleRevealed } from "@/lib/birthday/cycle";
-import { BIRTHDAY_COUNTDOWN_SECONDS } from "@/lib/birthday/countdown";
 import {
   loadLetters,
   reconcileLetter,
@@ -76,9 +75,7 @@ export default function AdminBirthdayPage() {
   const [letterDate, setLetterDate] = useState("");
   const [letterText, setLetterText] = useState("");
   const [letterSections, setLetterSections] = useState<LetterSection[]>([]);
-  const [thumbSrc, setThumbSrc] = useState("");
-  const [thumbAlt, setThumbAlt] = useState(DEFAULT_LETTER_THUMBNAIL.alt);
-  const [thumbCaption, setThumbCaption] = useState("");
+  const [thumbnail, setThumbnail] = useState<LetterThumbnail>(DEFAULT_LETTER_THUMBNAIL);
 
   const [addOpen, setAddOpen] = useState(false);
   const [addAge, setAddAge] = useState(1);
@@ -88,11 +85,6 @@ export default function AdminBirthdayPage() {
   const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
   const [serverLetters, setServerLetters] = useState<Map<number, ServerLetter>>(new Map());
   const [savingToServer, setSavingToServer] = useState(false);
-  const [countdownPreview, setCountdownPreview] = useState<{
-    revealAt: number;
-    now: number;
-  } | null>(null);
-  const countdownPreviewOpen = countdownPreview !== null;
 
   // Published-by-date: an edition whose birthday has passed is FROZEN — the
   // server refuses further writes — so the editor must not offer a save that can
@@ -105,9 +97,7 @@ export default function AdminBirthdayPage() {
     setLetterDate(draft.date);
     setLetterText(draft.fullText);
     setLetterSections(draft.sections);
-    setThumbSrc(draft.thumbnail?.src ?? "");
-    setThumbAlt(draft.thumbnail?.alt ?? DEFAULT_LETTER_THUMBNAIL.alt);
-    setThumbCaption(draft.thumbnail?.caption ?? "");
+    setThumbnail(draft.thumbnail ?? DEFAULT_LETTER_THUMBNAIL);
   }
 
   function selectAge(age: number) {
@@ -128,9 +118,7 @@ export default function AdminBirthdayPage() {
         setLetterDate(draft.date);
         setLetterText(draft.fullText);
         setLetterSections(draft.sections);
-        setThumbSrc(draft.thumbnail?.src ?? "");
-        setThumbAlt(draft.thumbnail?.alt ?? DEFAULT_LETTER_THUMBNAIL.alt);
-        setThumbCaption(draft.thumbnail?.caption ?? "");
+        setThumbnail(draft.thumbnail ?? DEFAULT_LETTER_THUMBNAIL);
         setSelectedAge(age);
       }
     });
@@ -161,16 +149,6 @@ export default function AdminBirthdayPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!countdownPreviewOpen) return;
-    const timer = window.setInterval(() => {
-      setCountdownPreview((preview) =>
-        preview === null ? null : { ...preview, now: Date.now() },
-      );
-    }, 200);
-    return () => window.clearInterval(timer);
-  }, [countdownPreviewOpen]);
-
   function currentDraft(): LetterDraft {
     return {
       title: letterTitle,
@@ -178,9 +156,9 @@ export default function AdminBirthdayPage() {
       fullText: letterText,
       sections: letterSections,
       thumbnail: {
-        src: thumbSrc.trim() || undefined,
-        alt: thumbAlt.trim() || DEFAULT_LETTER_THUMBNAIL.alt,
-        caption: thumbCaption.trim() || undefined,
+        src: thumbnail.src?.trim() || undefined,
+        alt: thumbnail.alt.trim() || DEFAULT_LETTER_THUMBNAIL.alt,
+        caption: thumbnail.caption?.trim() || undefined,
       },
     };
   }
@@ -317,14 +295,6 @@ export default function AdminBirthdayPage() {
     router.push(`/birthday-experience?preview=1&full=1&age=${selectedAge}`);
   }
 
-  function previewBirthdayCountdown() {
-    const now = Date.now();
-    setCountdownPreview({
-      now,
-      revealAt: now + BIRTHDAY_COUNTDOWN_SECONDS * 1000,
-    });
-  }
-
   function updateSection(id: string, patch: Partial<LetterSection>) {
     setLetterSections((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
   }
@@ -362,13 +332,6 @@ export default function AdminBirthdayPage() {
               tema dibaca dari Katalog Tema Tahunan.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={previewBirthdayCountdown}
-            className="shrink-0 rounded-lg border border-[#f6d77a]/45 bg-[#f6d77a]/10 px-5 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#f6d77a] transition hover:bg-[#f6d77a]/15 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c]"
-          >
-            Preview Countdown Ulang Tahun
-          </button>
         </div>
         <p
           className={`mt-3 rounded-lg border px-4 py-3 text-xs ${
@@ -529,63 +492,6 @@ export default function AdminBirthdayPage() {
                 <p className="text-xs text-[#fdf3d8]/60 mt-2">
                   Pisahkan paragraf dengan baris kosong. Tandai judul scene dengan **dua bintang**.
                 </p>
-              </div>
-
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4">
-                <div>
-                  <h3 className="text-sm font-medium text-[#fdf3d8]">Foto Thumbnail Pembuka</h3>
-                  <p className="text-xs text-[#fdf3d8]/60 mt-1">
-                    Kosongkan “Path foto” untuk mempertahankan placeholder jujur. Hanya gunakan foto
-                    publik yang benar-benar tersedia (mis. file di <code>public/</code>). Media privat
-                    dari /admin/media tidak boleh dipakai di sini.
-                  </p>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label htmlFor="thumb-src" className="text-sm text-[#fdf3d8]/80">
-                      Path foto (opsional)
-                    </label>
-                    <input
-                      id="thumb-src"
-                      value={thumbSrc}
-                      onChange={(e) => setThumbSrc(e.target.value)}
-                      className="mt-2 w-full rounded-lg bg-transparent border border-white/15 px-4 py-2.5 text-sm text-[#f8fafc] focus:outline-none focus:ring-1 focus:ring-[#f6d77a]/40"
-                      placeholder="/media/vanka-opening.jpg"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="thumb-alt" className="text-sm text-[#fdf3d8]/80">
-                      Teks alternatif
-                    </label>
-                    <input
-                      id="thumb-alt"
-                      value={thumbAlt}
-                      onChange={(e) => setThumbAlt(e.target.value)}
-                      className="mt-2 w-full rounded-lg bg-transparent border border-white/15 px-4 py-2.5 text-sm text-[#f8fafc] focus:outline-none focus:ring-1 focus:ring-[#f6d77a]/40"
-                      placeholder="Bingkai foto pembuka Vanka"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="thumb-caption" className="text-sm text-[#fdf3d8]/80">
-                    Keterangan (opsional)
-                  </label>
-                  <input
-                    id="thumb-caption"
-                    value={thumbCaption}
-                    onChange={(e) => setThumbCaption(e.target.value)}
-                    className="mt-2 w-full rounded-lg bg-transparent border border-white/15 px-4 py-2.5 text-sm text-[#f8fafc] focus:outline-none focus:ring-1 focus:ring-[#f6d77a]/40"
-                    placeholder="Belum ada foto pembuka yang dipilih."
-                  />
-                </div>
-                {thumbSrc.trim() && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={thumbSrc.trim()}
-                    alt={thumbAlt || "Pratinjau thumbnail"}
-                    className="mt-1 h-40 w-32 rounded-lg border border-[#e9c67c]/30 object-cover"
-                  />
-                )}
               </div>
 
               <div className="flex flex-col sm:flex-row flex-wrap gap-3">
@@ -786,17 +692,6 @@ export default function AdminBirthdayPage() {
         onConfirm={confirmDelete}
         onCancel={() => setOpenDelete(false)}
       />
-      {countdownPreview && (
-        <BirthdayCountdown
-          revealAt={countdownPreview.revealAt}
-          now={countdownPreview.now}
-          onClose={() => setCountdownPreview(null)}
-          onOpenGift={() => {
-            setCountdownPreview(null);
-            router.push("/birthday-experience?preview=1&full=1&age=1");
-          }}
-        />
-      )}
     </div>
   );
 }

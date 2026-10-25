@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
+import BirthdayCountdown from "@/components/birthday/BirthdayCountdown";
 import { cycleForDate, latestRevealedCycle, type BirthdayCycle } from "@/lib/birthday/cycle";
+import { BIRTHDAY_COUNTDOWN_SECONDS } from "@/lib/birthday/countdown";
 import { formatBirthdayDate, getThemeByAge } from "@/lib/birthday/theme-registry";
 
 /**
@@ -10,9 +14,9 @@ import { formatBirthdayDate, getThemeByAge } from "@/lib/birthday/theme-registry
  *
  * Hanya navigasi + badge edisi ulang tahun yang akan tayang (dari katalog tema).
  * TIDAK menampilkan media/statistik: itu milik Pustaka Media. Setiap badge
- * edisi punya tombol preview pengalaman (`?preview=1&full=1&age=N`): preview
- * menjalankan SELURUH pengalaman dari awal (kotak hadiah → pembuka → surat →
- * kotak kenangan), dengan draf surat admin (termasuk thumbnail) dimuat.
+ * edisi punya preview countdown dan pengalaman penuh (`?preview=1&full=1&age=N`):
+ * preview pengalaman menjalankan SELURUH cerita dari awal dengan draf surat
+ * admin (termasuk thumbnail) dimuat.
  *
  * Logika edisi memakai kebijakan siklus (
  * `cycleForDate` / `latestRevealedCycle`): sebelum 27 Oktober hanya badge edisi
@@ -56,7 +60,24 @@ function editionBadges(now: Date): EditionBadge[] {
 }
 
 export default function AdminDashboard() {
+  const router = useRouter();
   const badges = editionBadges(new Date());
+  const [countdownPreview, setCountdownPreview] = useState<{
+    age: number;
+    revealAt: number;
+    now: number;
+  } | null>(null);
+  const countdownPreviewOpen = countdownPreview !== null;
+
+  useEffect(() => {
+    if (!countdownPreviewOpen) return;
+    const timer = window.setInterval(() => {
+      setCountdownPreview((preview) =>
+        preview === null ? null : { ...preview, now: Date.now() },
+      );
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [countdownPreviewOpen]);
 
   return (
     <div className="space-y-10">
@@ -92,12 +113,28 @@ export default function AdminDashboard() {
                     ? `Sudah tayang sejak ${formatBirthdayDate(badge.cycle.age)}`
                     : `Akan tayang ${formatBirthdayDate(badge.cycle.age)} (WIT)`}
                 </p>
-                <Link
-                  href={`/birthday-experience?preview=1&full=1&age=${badge.cycle.age}`}
-                  className="inline-flex items-center rounded-lg border border-[#f6d77a]/40 px-4 py-2 text-sm text-[#f6d77a] transition-colors hover:bg-[#f6d77a]/10"
-                >
-                  Preview Pengalaman
-                </Link>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href={`/birthday-experience?preview=1&full=1&age=${badge.cycle.age}`}
+                    className="inline-flex items-center rounded-lg border border-[#f6d77a]/40 px-4 py-2 text-sm text-[#f6d77a] transition-colors hover:bg-[#f6d77a]/10"
+                  >
+                    Preview Pengalaman
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = Date.now();
+                      setCountdownPreview({
+                        age: badge.cycle.age,
+                        now,
+                        revealAt: now + BIRTHDAY_COUNTDOWN_SECONDS * 1000,
+                      });
+                    }}
+                    className="inline-flex items-center rounded-lg border border-[#f6d77a]/40 px-4 py-2 text-sm text-[#f6d77a] transition-colors hover:bg-[#f6d77a]/10"
+                  >
+                    Preview Countdown
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -113,6 +150,18 @@ export default function AdminDashboard() {
           <QuickLink href="/admin/memories" label="Arsip Kenangan" />
         </div>
       </section>
+      {countdownPreview && (
+        <BirthdayCountdown
+          revealAt={countdownPreview.revealAt}
+          now={countdownPreview.now}
+          onClose={() => setCountdownPreview(null)}
+          onOpenGift={() => {
+            router.push(
+              `/birthday-experience?preview=1&full=1&age=${countdownPreview.age}`,
+            );
+          }}
+        />
+      )}
     </div>
   );
 }
