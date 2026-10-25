@@ -378,10 +378,10 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
   };
 
   return (
-    <div className="flex w-full max-w-3xl flex-col items-center gap-4">
+    <div className="flex w-full max-w-5xl flex-col items-center gap-4">
       <div
         data-testid="memory-scrapbook-stage"
-        className="relative grid aspect-[4/5] w-full max-w-lg place-items-center overflow-hidden rounded-[2rem] border border-white/10 bg-[#211a18] shadow-[0_30px_100px_-32px_rgba(0,0,0,0.9)]"
+        className="relative grid aspect-[4/5] w-full max-w-2xl place-items-center overflow-hidden rounded-[2rem] border border-white/10 bg-[#211a18] shadow-[0_30px_100px_-32px_rgba(0,0,0,0.9)]"
         style={{ perspective: 1400 }}
       >
         <AnimatePresence initial={false} custom={direction}>
@@ -455,10 +455,10 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                     mass: 1.15,
                   }}
                   aria-hidden="true"
-                  className={`absolute top-1/2 z-10 aspect-[3/4] w-[29%] -translate-y-1/2 overflow-hidden border-[6px] border-[#f2eadb] bg-[#f2eadb] p-1 shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[9px] sm:p-1.5 ${
+                  className={`absolute top-1/2 z-10 aspect-[3/4] w-[32%] -translate-y-1/2 overflow-hidden border-[6px] border-[#f2eadb] bg-[#f2eadb] p-1 shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[9px] sm:p-1.5 ${
                     offset < 0
-                      ? "left-[8%] -rotate-[12deg] sm:left-[9%]"
-                      : "right-[8%] rotate-[11deg] sm:right-[9%]"
+                      ? "left-[3%] -rotate-[12deg] sm:left-[4%]"
+                      : "right-[3%] rotate-[11deg] sm:right-[4%]"
                   }`}
                 >
                   {isImage && (
@@ -492,7 +492,7 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
               exit="exit"
               transition={{ duration: reduce ? 0 : 1.15, ease: [0.22, 1, 0.36, 1] }}
               data-testid="memory-scrapbook-photo"
-              className="relative col-start-1 row-start-1 w-[54%] max-w-xs border-[8px] border-[#f2eadb] bg-[#f2eadb] p-1.5 shadow-[0_28px_75px_-22px_rgba(0,0,0,0.9)] sm:border-[12px] sm:p-2"
+              className="relative col-start-1 row-start-1 w-[70%] max-w-md border-[8px] border-[#f2eadb] bg-[#f2eadb] p-1.5 shadow-[0_28px_75px_-22px_rgba(0,0,0,0.9)] sm:border-[12px] sm:p-2"
               style={{ transformPerspective: 1400, transformStyle: "preserve-3d" }}
             >
               <GalleryFrame
