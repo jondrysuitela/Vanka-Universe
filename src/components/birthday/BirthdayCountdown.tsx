@@ -10,6 +10,20 @@ import {
   formatCountdown,
 } from "@/lib/birthday/countdown";
 
+const FIREWORKS = [
+  { x: 16, y: 28, delay: 0.05, color: "#f6d77a" },
+  { x: 83, y: 25, delay: 0.35, color: "#f3a6d2" },
+  { x: 27, y: 62, delay: 0.7, color: "#a9c8ff" },
+  { x: 74, y: 64, delay: 0.95, color: "#fff0c4" },
+  { x: 50, y: 18, delay: 1.2, color: "#b6f5cd" },
+] as const;
+
+const FIREWORK_PARTICLES = Array.from({ length: 26 }, (_, index) => ({
+  angle: (index / 26) * Math.PI * 2,
+  distance: 58 + ((index * 37) % 66),
+  size: index % 5 === 0 ? 5 : 3,
+}));
+
 export default function BirthdayCountdown({
   revealAt,
   now,
@@ -171,11 +185,11 @@ export default function BirthdayCountdown({
             id="birthday-countdown-title"
             className="font-display text-2xl text-[#fdf3d8] sm:text-4xl"
           >
-            {celebrating ? "Selamat Ulang Tahun, Vanka" : "Menuju ulang tahun Vanka"}
+            {celebrating ? "Jam dua belas tepat!" : "Menuju ulang tahun Vanka"}
           </h1>
           <p className="mt-3 font-serif text-sm text-white/70 sm:text-base">
             {celebrating
-              ? "Satu tahun pertama di antara bintang dimulai."
+              ? "Lilin padam. Semesta menyala untukmu."
               : "Sebuah semesta kecil sedang menunggu untuk dibuka."}
           </p>
           {!celebrating ? (
@@ -197,17 +211,127 @@ export default function BirthdayCountdown({
 
         {celebrating && (
           <>
+            <motion.div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 z-[1]"
+              initial={{ opacity: 0 }}
+              animate={
+                reduce
+                  ? { opacity: 0.16 }
+                  : { opacity: [0, 0.78, 0.12, 0.48, 0.08, 0.3, 0] }
+              }
+              transition={{ duration: 3.6, ease: "easeOut" }}
+              style={{
+                background:
+                  "radial-gradient(ellipse at 50% 42%, rgba(255,248,220,0.9) 0%, rgba(246,215,122,0.38) 18%, rgba(139,92,246,0.28) 42%, rgba(4,6,15,0) 76%)",
+              }}
+            />
+            {!reduce &&
+              FIREWORKS.map((firework, burstIndex) => (
+                <div
+                  key={`${firework.x}-${firework.y}`}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 z-[2] overflow-hidden"
+                >
+                  <motion.div
+                    className="absolute h-2 w-2 rounded-full"
+                    style={{
+                      left: `${firework.x}%`,
+                      top: `${firework.y}%`,
+                      backgroundColor: firework.color,
+                      boxShadow: `0 0 22px 8px ${firework.color}`,
+                    }}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: [0, 1.8, 0.1], opacity: [0, 1, 0] }}
+                    transition={{
+                      duration: 1.15,
+                      delay: firework.delay,
+                      ease: "easeOut",
+                    }}
+                  />
+                  <motion.div
+                    className="absolute h-4 w-4 rounded-full border-2"
+                    style={{
+                      left: `${firework.x}%`,
+                      top: `${firework.y}%`,
+                      borderColor: firework.color,
+                      boxShadow: `0 0 26px ${firework.color}`,
+                    }}
+                    initial={{ x: -8, y: -8, scale: 0, opacity: 0 }}
+                    animate={{
+                      x: -8,
+                      y: -8,
+                      scale: [0.1, 7, 12],
+                      opacity: [0, 0.9, 0],
+                    }}
+                    transition={{
+                      duration: 1.5,
+                      delay: firework.delay,
+                      ease: "easeOut",
+                    }}
+                  />
+                  {FIREWORK_PARTICLES.map((particle, index) => (
+                    <motion.span
+                      key={index}
+                      className="absolute rounded-full"
+                      style={{
+                        left: `${firework.x}%`,
+                        top: `${firework.y}%`,
+                        width: particle.size,
+                        height: particle.size,
+                        backgroundColor: firework.color,
+                        boxShadow: `0 0 12px 2px ${firework.color}`,
+                      }}
+                      initial={{ x: 0, y: 0, scale: 0.2, opacity: 0 }}
+                      animate={{
+                        x: Math.cos(particle.angle) * particle.distance,
+                        y: Math.sin(particle.angle) * particle.distance,
+                        scale: [0.2, 1.2, 0.1],
+                        opacity: [0, 1, 0],
+                      }}
+                      transition={{
+                        duration: 1.35 + (index % 4) * 0.12,
+                        delay: firework.delay + (index % 3) * 0.025,
+                        ease: "easeOut",
+                      }}
+                    />
+                  ))}
+                  {burstIndex === 0 && (
+                    <span className="sr-only">Kembang api merayakan ulang tahun Vanka</span>
+                  )}
+                </div>
+              ))}
             <GlitterBurst active durationMs={BIRTHDAY_CELEBRATION_MS} seed={0x27102026} count={150} />
+            <motion.div
+              key="midnight-celebration-title"
+              initial={reduce ? { opacity: 1 } : { opacity: 0, y: 24, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ delay: reduce ? 0 : 0.35, duration: reduce ? 0 : 1.05, ease: "easeOut" }}
+              className="relative z-10 mt-6 flex flex-col items-center"
+            >
+              <p className="mb-3 rounded-full border border-[#f6d77a]/45 bg-[#0b1226]/65 px-4 py-1.5 font-sans text-[0.58rem] font-bold uppercase tracking-[0.38em] text-[#f6d77a] shadow-[0_0_28px_-8px_rgba(246,215,122,0.8)] sm:text-[0.68rem]">
+                A new orbit begins
+              </p>
+              <h2 className="bg-gradient-to-b from-white via-[#fff0c4] to-[#e9c67c] bg-clip-text font-display text-3xl leading-tight text-transparent drop-shadow-[0_0_28px_rgba(246,215,122,0.55)] sm:text-5xl">
+                Selamat Ulang Tahun,
+                <span className="mt-1 block text-4xl sm:text-6xl">Vanka ✨</span>
+              </h2>
+              <p className="mt-4 max-w-md font-serif text-sm leading-relaxed text-white/85 sm:text-base">
+                Satu tahun pertama di antara bintang dimulai. Seluruh semesta merayakanmu.
+              </p>
+            </motion.div>
             {celebrationReady && (
               <motion.button
                 type="button"
                 onClick={onOpenGift}
-                initial={reduce ? { opacity: 1 } : { opacity: 0, y: 16, scale: 0.96 }}
+                initial={reduce ? { opacity: 1 } : { opacity: 0, y: 22, scale: 0.92 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: reduce ? 0 : 0.7, ease: "easeOut" }}
-                className="mt-8 inline-flex items-center justify-center rounded-full border border-[#f6d77a]/70 bg-gradient-to-b from-[#fff0c4] via-[#e9c67c] to-[#bd8b48] px-9 py-4 font-sans text-xs font-bold uppercase tracking-[0.24em] text-[#241809] shadow-[0_0_45px_-12px_rgba(246,215,122,0.9)] transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#fdf3d8] sm:text-sm"
+                transition={{ duration: reduce ? 0 : 0.75, ease: "easeOut" }}
+                className="relative z-10 mt-7 inline-flex items-center justify-center gap-3 rounded-full border border-[#fff0c4]/80 bg-gradient-to-b from-white via-[#f6d77a] to-[#bd8b48] px-10 py-4 font-sans text-xs font-bold uppercase tracking-[0.24em] text-[#241809] shadow-[0_0_70px_-10px_rgba(246,215,122,1)] transition hover:scale-[1.04] hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#fdf3d8] sm:text-sm"
               >
+                <span aria-hidden="true">✦</span>
                 Buka Kado Vanka
+                <span aria-hidden="true">✦</span>
               </motion.button>
             )}
           </>

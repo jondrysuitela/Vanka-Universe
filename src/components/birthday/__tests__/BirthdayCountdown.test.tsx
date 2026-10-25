@@ -4,6 +4,8 @@ import "../../../app/__tests__/jsdom-stubs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
+import { BIRTHDAY_CELEBRATION_MS } from "@/lib/birthday/countdown";
+
 vi.mock("framer-motion", async () => {
   const { createElement } = await import("react");
   const motion = new Proxy(
@@ -42,12 +44,14 @@ describe("BirthdayCountdown", () => {
     expect(screen.queryByRole("button", { name: "Buka Kado Vanka" })).toBeNull();
 
     rerender(<BirthdayCountdown revealAt={revealAt} now={revealAt} onOpenGift={onOpenGift} />);
-    expect(screen.getByRole("heading", { name: "Selamat Ulang Tahun, Vanka" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Jam dua belas tepat!" })).toBeTruthy();
+    expect(screen.getByText("A new orbit begins")).toBeTruthy();
+    expect(screen.getByText(/Selamat Ulang Tahun/)).toBeTruthy();
     expect(screen.getByText("27 Oktober · 00.00 WIT")).toBeTruthy();
     expect(container.querySelectorAll('path[fill="#ffd36e"]')).toHaveLength(0);
 
     act(() => {
-      vi.advanceTimersByTime(4200);
+      vi.advanceTimersByTime(BIRTHDAY_CELEBRATION_MS);
     });
     fireEvent.click(screen.getByRole("button", { name: "Buka Kado Vanka" }));
     expect(onOpenGift).toHaveBeenCalledOnce();

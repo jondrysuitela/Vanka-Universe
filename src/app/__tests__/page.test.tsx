@@ -135,6 +135,7 @@ describe("landing page — on the birthday itself", () => {
     expect(screen.getByText("00:15")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Buka Kado Vanka/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Buka hadiah/i })).toBeNull();
+    expect(document.querySelector('[aria-label="Vanka Experience — ulang tahun Vanka"]')).toBeNull();
   });
 
   it("covers the page with the experience overlay", async () => {

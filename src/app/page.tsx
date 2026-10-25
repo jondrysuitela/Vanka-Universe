@@ -6,7 +6,10 @@ import { motion, useReducedMotion } from "framer-motion";
 import CosmicBackdrop from "@/components/CosmicBackdrop";
 import BirthdayOverlay from "@/components/birthday/BirthdayOverlay";
 import BirthdayCountdown from "@/components/birthday/BirthdayCountdown";
-import { BIRTHDAY_COUNTDOWN_SECONDS } from "@/lib/birthday/countdown";
+import {
+  BIRTHDAY_COUNTDOWN_SECONDS,
+  countdownRefreshDelay,
+} from "@/lib/birthday/countdown";
 import {
   FIRST_EXPERIENCE_YEAR,
   FIRST_EXPERIENCE_OPEN_LABEL,
@@ -127,9 +130,15 @@ export default function Home() {
 
     let timer: number | null = null;
     let initial = true;
-    const countdownWindowMs = BIRTHDAY_COUNTDOWN_SECONDS * 1000;
+    let countdownWasEntered = false;
 
     const update = () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+      if (document.visibilityState === "hidden") return;
+
       const now = new Date();
       const nowMs = now.getTime();
       const celebrating = birthdayDayCycle(now);
@@ -146,15 +155,16 @@ export default function Home() {
         initial = false;
       }
 
-      if (remaining > 0 && remaining <= countdownWindowMs) {
-        setCountdownStarted(true);
-      }
-
-      if (remaining > countdownWindowMs) {
-        timer = window.setTimeout(update, remaining - countdownWindowMs);
-      } else if (remaining > 0) {
-        timer = window.setTimeout(update, Math.min(1000, remaining));
+      if (remaining > 0) {
+        if (remaining <= BIRTHDAY_COUNTDOWN_SECONDS * 1000) {
+          countdownWasEntered = true;
+          setCountdownStarted(true);
+        }
+        timer = window.setTimeout(update, countdownRefreshDelay(revealAt, nowMs));
       } else if (celebrating) {
+        if (countdownWasEntered && celebrating.year === FIRST_EXPERIENCE_YEAR) {
+          setCountdownStarted(true);
+        }
         timer = window.setTimeout(
           update,
           Math.max(100, celebrating.uploadEnd.getTime() - nowMs),
@@ -162,8 +172,13 @@ export default function Home() {
       }
     };
 
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") update();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
     update();
     return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (timer !== null) window.clearTimeout(timer);
     };
   }, []);
