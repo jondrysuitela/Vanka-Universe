@@ -334,32 +334,67 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
     initial: (travel: number) =>
       reduce
         ? { opacity: 0 }
-        : { opacity: 0, scale: 0.82, x: travel * 110, rotateZ: travel * 9, rotateY: travel * 8 },
+        : {
+            opacity: 0,
+            scale: 0.68,
+            x: travel * 190,
+            y: 28,
+            rotateZ: travel * 16,
+            rotateY: travel * 42,
+            filter: "blur(8px) brightness(1.6)",
+          },
     animate: () =>
       reduce
         ? { opacity: 1 }
-        : { opacity: 1, scale: 1, x: 0, rotateZ: index % 2 === 0 ? -1.5 : 1.5, rotateY: 0 },
+        : {
+            opacity: 1,
+            scale: [0.92, 1.035, 1],
+            x: [direction * -24, direction * 8, 0],
+            y: [12, -5, 0],
+            rotateZ: [direction * -5, direction * 2, index % 2 === 0 ? -1.5 : 1.5],
+            rotateY: [direction * -16, direction * 5, 0],
+            filter: ["blur(3px) brightness(1.35)", "blur(0px) brightness(1)"],
+          },
     exit: (travel: number) =>
       reduce
         ? { opacity: 0 }
-        : { opacity: 0, scale: 0.9, x: travel * -120, rotateZ: travel * -11, rotateY: travel * -6 },
+        : {
+            opacity: 0,
+            scale: 0.82,
+            x: travel * -190,
+            y: -24,
+            rotateZ: travel * -15,
+            rotateY: travel * -38,
+            filter: "blur(7px) brightness(1.5)",
+          },
   };
 
   return (
     <div className="flex w-full max-w-3xl flex-col items-center gap-4">
       <div className="relative grid aspect-[4/3] w-full max-w-4xl place-items-center overflow-hidden rounded-[2rem] border border-white/10 bg-[#100e17] shadow-[0_30px_100px_-32px_rgba(0,0,0,0.9)] sm:aspect-[16/10]">
-        {item.kind === "image" && item.id !== PLACEHOLDER_ITEM.id && (
-          <Image
-            key={`backdrop-${item.id}`}
-            src={getMediaUrl(item.id)}
-            alt=""
-            fill
-            sizes="(max-width: 768px) 100vw, 80vw"
-            className="scale-110 object-cover opacity-30 blur-2xl transition-opacity duration-700"
-            unoptimized
-            aria-hidden="true"
-          />
-        )}
+        <AnimatePresence initial={false} custom={direction}>
+          {item.kind === "image" && item.id !== PLACEHOLDER_ITEM.id && (
+            <motion.div
+              key={`backdrop-${item.id}`}
+              custom={direction}
+              initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 1.2, x: direction * 70 }}
+              animate={{ opacity: 0.32, scale: 1.1, x: 0 }}
+              exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 1.28, x: direction * -80 }}
+              transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S * 1.4, ease: [0.22, 1, 0.36, 1] }}
+              className="absolute inset-0"
+              aria-hidden="true"
+            >
+              <Image
+                src={getMediaUrl(item.id)}
+                alt=""
+                fill
+                sizes="(max-width: 768px) 100vw, 80vw"
+                className="scale-110 object-cover blur-2xl"
+                unoptimized
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div className="absolute inset-0 bg-gradient-to-b from-[#100e17]/35 via-[#100e17]/15 to-[#100e17]/75" />
 
         {list.length > 1 &&
@@ -369,8 +404,25 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
             const isImage = card.kind === "image" && card.id !== PLACEHOLDER_ITEM.id;
 
             return (
-              <div
+              <motion.div
                 key={`album-card-${offset}-${card.id}`}
+                initial={
+                  reduce
+                    ? { opacity: 0 }
+                    : { opacity: 0, x: offset * 60, y: 24, rotate: offset * 18, scale: 0.78 }
+                }
+                animate={
+                  reduce
+                    ? { opacity: 0.82 }
+                    : {
+                        opacity: 0.82,
+                        x: 0,
+                        y: 0,
+                        rotate: offset < 0 ? -9 : 8,
+                        scale: 1,
+                      }
+                }
+                transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: [0.22, 1, 0.36, 1] }}
                 aria-hidden="true"
                 className={`absolute top-1/2 z-10 h-[56%] w-[27%] -translate-y-1/2 overflow-hidden border-[6px] border-[#f2eadb] bg-[#f2eadb] shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[9px] ${
                   offset < 0
@@ -388,7 +440,7 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                     unoptimized
                   />
                 )}
-              </div>
+              </motion.div>
             );
           })}
 
