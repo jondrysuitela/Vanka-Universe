@@ -73,7 +73,7 @@ describe("ExperienceScene memory gallery", () => {
 
     expect(screen.getByText("Foto pertama")).toBeTruthy();
     expect(screen.getByTestId("memory-scrapbook-stage").className).toContain("aspect-[4/5]");
-    expect(screen.getByTestId("memory-scrapbook-photo").className).toContain("w-[62%]");
+    expect(screen.getByTestId("memory-scrapbook-photo").className).toContain("w-[54%]");
     expect(screen.getByAltText("Foto pertama").className).toContain("object-contain");
     act(() => {
       vi.advanceTimersByTime(10_000);

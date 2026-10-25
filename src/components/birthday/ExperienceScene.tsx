@@ -344,36 +344,36 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
         ? { opacity: 0 }
         : {
             opacity: 0,
-            scale: 0.78,
-            x: travel * 170,
-            y: 48,
-            rotateZ: travel * 14,
-            rotateY: travel * 58,
-            filter: "blur(5px) brightness(1.3)",
+            scale: 0.76,
+            x: travel * 210,
+            y: 52,
+            rotateZ: travel * 18,
+            rotateY: travel * 68,
+            filter: "blur(4px) brightness(1.25)",
           },
     animate: () =>
       reduce
         ? { opacity: 1 }
         : {
             opacity: 1,
-            scale: [0.94, 1.025, 1],
-            x: [direction * -34, direction * 12, 0],
-            y: [24, -8, 0],
-            rotateZ: [direction * -7, direction * 2, index % 2 === 0 ? -2 : 2],
-            rotateY: [direction * -18, direction * 5, 0],
-            filter: ["blur(2px) brightness(1.18)", "blur(0px) brightness(1)"],
+            scale: [0.91, 1.035, 1],
+            x: [direction * -42, direction * 14, 0],
+            y: [32, -10, 0],
+            rotateZ: [direction * -9, direction * 3, index % 2 === 0 ? -2.5 : 2.5],
+            rotateY: [direction * -24, direction * 7, 0],
+            filter: ["blur(3px) brightness(1.22)", "blur(0px) brightness(1)"],
           },
     exit: (travel: number) =>
       reduce
         ? { opacity: 0 }
         : {
             opacity: 0,
-            scale: 0.88,
-            x: travel * -165,
-            y: -38,
-            rotateZ: travel * -14,
-            rotateY: travel * -52,
-            filter: "blur(4px) brightness(1.25)",
+            scale: 0.84,
+            x: travel * -205,
+            y: -42,
+            rotateZ: travel * -17,
+            rotateY: travel * -62,
+            filter: "blur(4px) brightness(1.2)",
           },
   };
 
@@ -381,7 +381,7 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
     <div className="flex w-full max-w-3xl flex-col items-center gap-4">
       <div
         data-testid="memory-scrapbook-stage"
-        className="relative grid aspect-[4/5] w-full max-w-lg place-items-center overflow-hidden rounded-[2rem] border border-white/10 bg-[#100e17] shadow-[0_30px_100px_-32px_rgba(0,0,0,0.9)]"
+        className="relative grid aspect-[4/5] w-full max-w-lg place-items-center overflow-hidden rounded-[2rem] border border-white/10 bg-[#211a18] shadow-[0_30px_100px_-32px_rgba(0,0,0,0.9)]"
         style={{ perspective: 1400 }}
       >
         <AnimatePresence initial={false} custom={direction}>
@@ -407,7 +407,7 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="absolute inset-0 bg-gradient-to-b from-[#100e17]/35 via-[#100e17]/15 to-[#100e17]/75" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(246,215,160,0.18),transparent_65%),linear-gradient(135deg,rgba(21,17,19,0.08),rgba(21,17,19,0.68))]" />
 
         {list.length > 1 && (
           <AnimatePresence initial={false} custom={direction}>
@@ -447,12 +447,18 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                           scale: 0.82,
                         }
                   }
-                  transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{
+                    duration: reduce ? 0 : GALLERY_TRANSITION_S,
+                    type: "spring",
+                    stiffness: 90,
+                    damping: 18,
+                    mass: 1.15,
+                  }}
                   aria-hidden="true"
-                  className={`absolute top-1/2 z-10 aspect-[3/4] w-[30%] -translate-y-1/2 overflow-hidden border-[6px] border-[#f2eadb] bg-[#f2eadb] p-1 shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[9px] sm:p-1.5 ${
+                  className={`absolute top-1/2 z-10 aspect-[3/4] w-[29%] -translate-y-1/2 overflow-hidden border-[6px] border-[#f2eadb] bg-[#f2eadb] p-1 shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[9px] sm:p-1.5 ${
                     offset < 0
-                      ? "left-[2%] -rotate-[12deg] sm:left-[5%]"
-                      : "right-[2%] rotate-[11deg] sm:right-[5%]"
+                      ? "left-[8%] -rotate-[12deg] sm:left-[9%]"
+                      : "right-[8%] rotate-[11deg] sm:right-[9%]"
                   }`}
                 >
                   {isImage && (
@@ -484,9 +490,9 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
               initial="initial"
               animate="animate"
               exit="exit"
-              transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: reduce ? 0 : 1.15, ease: [0.22, 1, 0.36, 1] }}
               data-testid="memory-scrapbook-photo"
-              className="relative col-start-1 row-start-1 w-[62%] max-w-sm border-[8px] border-[#f2eadb] bg-[#f2eadb] p-1.5 shadow-[0_28px_75px_-22px_rgba(0,0,0,0.9)] sm:border-[12px] sm:p-2"
+              className="relative col-start-1 row-start-1 w-[54%] max-w-xs border-[8px] border-[#f2eadb] bg-[#f2eadb] p-1.5 shadow-[0_28px_75px_-22px_rgba(0,0,0,0.9)] sm:border-[12px] sm:p-2"
               style={{ transformPerspective: 1400, transformStyle: "preserve-3d" }}
             >
               <GalleryFrame
@@ -503,6 +509,21 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                   </figcaption>
                 }
               />
+              {!reduce && (
+                <motion.span
+                  key={`warm-wash-${index}`}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 z-10"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0, 0.55, 0] }}
+                  transition={{ duration: 1.15, ease: "easeOut" }}
+                  style={{
+                    background:
+                      "radial-gradient(ellipse at 50% 42%, rgba(255,244,216,0.8), rgba(255,222,157,0.22) 48%, transparent 78%)",
+                    mixBlendMode: "screen",
+                  }}
+                />
+              )}
               <motion.span
                 aria-hidden="true"
                 className="pointer-events-none absolute -top-2 left-1/2 z-20 h-7 w-20 -translate-x-1/2 rotate-[-3deg] border-x border-white/20 bg-[#e9d8a9]/80 shadow-sm sm:-top-3 sm:h-9 sm:w-28"
