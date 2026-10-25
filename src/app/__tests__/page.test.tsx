@@ -145,8 +145,28 @@ describe("landing page — on the birthday itself", () => {
     expect(overlay).not.toBeNull();
     expect(overlay?.getAttribute("aria-label")).toContain("Vanka Experience");
     expect(screen.getByTestId("birthday-ambient-celebration").getAttribute("aria-hidden")).toBe("true");
-    // The overlay starts at the gift box, exactly like the full page.
+    // The overlay starts at the gift box, where its ambient opening backdrop runs.
     expect(screen.getByRole("button", { name: /Buka hadiah/i })).toBeTruthy();
+  });
+
+  it("shows the ambient backdrop while opening the gift and letter", async () => {
+    await renderAt(REVEAL);
+
+    await act(async () => {
+      screen.getByRole("button", { name: /Buka hadiah/i }).click();
+      await new Promise((resolve) => window.setTimeout(resolve, 1750));
+    });
+    await act(async () => {
+      screen.getByRole("button", { name: "Buka Surat" }).click();
+    });
+    await screen.findByRole("button", { name: "Buka surat ulang tahun dari Ayah" });
+    expect(screen.getByTestId("birthday-ambient-celebration")).toBeTruthy();
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Buka surat ulang tahun dari Ayah" }).click();
+      await new Promise((resolve) => window.setTimeout(resolve, 1150));
+    });
+    expect(screen.queryByTestId("birthday-ambient-celebration")).toBeNull();
   });
 
   it("closes the overlay and keeps the card able to re-open it", async () => {

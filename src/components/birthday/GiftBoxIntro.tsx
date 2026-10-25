@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
+import BirthdayAmbientEffects from "./BirthdayAmbientEffects";
 import GlitterBurst from "./GlitterBurst";
 
 interface GiftBoxIntroProps {
@@ -46,6 +47,7 @@ export default function GiftBoxIntro({ onOpen, onReveal }: GiftBoxIntroProps) {
 
   return (
     <section className="relative z-10 mx-auto flex min-h-dvh w-full max-w-3xl flex-col items-center justify-center gap-10 px-6 py-20 text-center">
+      <BirthdayAmbientEffects />
       {/*
         Full-screen glitter while the box opens. It plays for exactly as long as
         the box takes to open, so the scene change happens inside the burst

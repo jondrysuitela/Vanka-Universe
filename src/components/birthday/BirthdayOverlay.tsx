@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 
-import BirthdayAmbientEffects from "./BirthdayAmbientEffects";
 import BirthdayExperiencePlayer from "./BirthdayExperiencePlayer";
 
 /**
@@ -50,7 +49,6 @@ export default function BirthdayOverlay({
       <div aria-hidden="true" className="cosmos-aurora-b fixed right-[4%] top-[30%] h-[45vmin] w-[45vmin]" />
       <div aria-hidden="true" className="cosmos-aurora-c fixed bottom-[-10%] left-[30%] h-[60vmin] w-[60vmin]" />
       <div aria-hidden="true" className="cosmos-vignette fixed inset-0" />
-      <BirthdayAmbientEffects />
 
       <div className="relative z-10">
         <BirthdayExperiencePlayer
