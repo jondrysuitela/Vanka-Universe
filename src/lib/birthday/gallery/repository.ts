@@ -89,6 +89,9 @@ export async function listCycleGallery(cycle: BirthdayCycle): Promise<BirthdayGa
 
   return records
     .filter((record) => (record.collection ?? "birthday") === "birthday")
+    // Defence in depth: even inside the birthday pool, a song is never a
+    // memory. (`music` uploads already land in their own pool.)
+    .filter((record) => record.kind !== "audio")
     .map((record) => ({ record, time: Date.parse(record.createdAt) }))
     .filter(({ time }) => Number.isFinite(time) && time >= start && time < end)
     .sort((a, b) => a.time - b.time || a.record.id.localeCompare(b.record.id))
@@ -103,7 +106,12 @@ export async function listCycleGallery(cycle: BirthdayCycle): Promise<BirthdayGa
  */
 export async function isMediaPubliclyRevealed(mediaId: string, now: Date): Promise<boolean> {
   const record = await guardedStoreRead(() => findMediaRecord(mediaId));
-  if (!record || (record.collection ?? "birthday") !== "birthday") return false;
+  if (!record) return false;
+  // A SONG is public through its own date-gated route, not through the gallery's
+  // (which exists to serve already-revealed *memories*). Keeping them apart is
+  // what lets the player stream a published song without widening this gate.
+  if (record.kind === "audio") return false;
+  if ((record.collection ?? "birthday") !== "birthday") return false;
 
   // NOTE: `cycleForDate` is NOT used here. During the birthday's own day a
   // cycle is ALREADY revealed but still in its upload window, so `cycleForDate`

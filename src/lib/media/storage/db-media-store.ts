@@ -26,7 +26,7 @@ import type {
   MediaStore,
   MediaUploadMetadata,
 } from "@/lib/media/storage/types";
-import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "@/lib/media/storage/types";
+import { maxBytesForKind } from "@/lib/media/storage/types";
 
 /**
  * Database-backed `MediaStore` (Tahap 4G.40D-3B).
@@ -100,7 +100,7 @@ export function createDbMediaStore(options: DbMediaStoreOptions): MediaStore {
       throw new ApiError(415, "UNSUPPORTED_TYPE", "Tipe media tidak didukung.");
     }
     const meta = MIME_MAP[mime];
-    const limit = meta.kind === "image" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+    const limit = maxBytesForKind(meta.kind);
     if (bytes.byteLength > limit) {
       throw new ApiError(413, "FILE_TOO_LARGE", "Ukuran media melebihi batas.");
     }

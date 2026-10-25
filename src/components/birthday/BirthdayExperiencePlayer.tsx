@@ -22,6 +22,7 @@ import {
   type GalleryItem,
 } from "@/lib/birthday/gallery/client-sync";
 import { loadPublicExperience } from "@/lib/birthday/public-experience";
+import { birthdayYear } from "@/lib/birthday/theme-registry";
 
 /**
  * The birthday experience itself — one player, used in TWO places:
@@ -198,7 +199,14 @@ export default function BirthdayExperiencePlayer({
         Background music for this edition. It is mounted from the start (so the
         file probe can run) but stays silent until the gift box is opened.
       */}
-      {ready && <ExperienceMusic age={editionAge ?? draftAge} started={musicStarted} overlay={overlay} />}
+      {ready && (
+        <ExperienceMusic
+          age={editionAge ?? draftAge}
+          editionYear={editionYear ?? birthdayYear(editionAge ?? draftAge)}
+          started={musicStarted}
+          overlay={overlay}
+        />
+      )}
 
       {!overlay && draftPreview && (
         <Link

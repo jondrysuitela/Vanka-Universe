@@ -14,7 +14,7 @@ import type {
   MediaStore,
   MediaUploadMetadata,
 } from "@/lib/media/storage/types";
-import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "@/lib/media/storage/types";
+import { maxBytesForKind } from "@/lib/media/storage/types";
 
 /**
  * Filesystem media provider (Tahap 4G.40C extraction).
@@ -149,16 +149,16 @@ async function save(
     throw new ApiError(
       415,
       "UNSUPPORTED_TYPE",
-      "Tipe file tidak didukung. Gunakan JPEG, PNG, WebP, GIF, atau MP4.",
+      "Tipe file tidak didukung. Gunakan JPEG, PNG, WebP, GIF, MP4, atau MP3.",
     );
   }
   const meta = MIME_MAP[mime];
-  const limit = meta.kind === "image" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+  const limit = maxBytesForKind(meta.kind);
   if (buf.byteLength > limit) {
     throw new ApiError(
       413,
       "FILE_TOO_LARGE",
-      `Ukuran file terlalu besar. Maksimal ${meta.kind === "image" ? "10 MB" : "50 MB"}.`,
+      `Ukuran file terlalu besar. Maksimal ${Math.round(limit / (1024 * 1024))} MB.`,
     );
   }
 

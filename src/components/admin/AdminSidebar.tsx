@@ -9,6 +9,7 @@ const NAV = [
   { href: "/admin/media", label: "Pustaka Media" },
   { href: "/admin/memories", label: "Arsip Kenangan" },
   { href: "/admin/birthday", label: "Tulis Surat" },
+  { href: "/admin/music", label: "Musik Ulang Tahun" },
   { href: "/admin/themes", label: "Katalog Tema Tahunan" },
   { href: "/admin/content", label: "Editor Konten" },
   { href: "/admin/archive", label: "Arsip Privat" },

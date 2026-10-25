@@ -20,7 +20,7 @@ import type {
   MediaStore,
   MediaUploadMetadata,
 } from "@/lib/media/storage/types";
-import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "@/lib/media/storage/types";
+import { maxBytesForKind } from "@/lib/media/storage/types";
 
 /**
  * Cloudflare R2 media provider (Tahap 4G.40D-2).
@@ -43,7 +43,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** Basename shape of a media object: `<uuid>.<ext>`. Used to keep the metadata
  * key from colliding with any possible media key. */
 const MEDIA_BASENAME_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|gif|webp|mp4)$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|gif|webp|mp4|mp3)$/i;
 
 /** Default test-only object prefix. Production must set its own explicit value. */
 export const DEFAULT_TEST_PREFIX = "test/";
@@ -308,7 +308,7 @@ export function createR2MediaStore(options: R2MediaOptions = {}): MediaStore {
       throw new ApiError(415, "UNSUPPORTED_TYPE", "Tipe media tidak didukung.");
     }
     const meta = MIME_MAP[mime];
-    const limit = meta.kind === "image" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+    const limit = maxBytesForKind(meta.kind);
     if (bytes.byteLength > limit) {
       throw new ApiError(413, "FILE_TOO_LARGE", "Ukuran media melebihi batas.");
     }
@@ -441,4 +441,3 @@ export function createR2MediaStore(options: R2MediaOptions = {}): MediaStore {
 
   return { list, save, read, find, updateMetadata, remove };
 }
-

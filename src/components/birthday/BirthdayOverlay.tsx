@@ -59,6 +59,7 @@ export default function BirthdayOverlay({
           overlay
           onClose={onClose}
         />
+
       </div>
     </div>
   );

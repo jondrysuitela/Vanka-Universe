@@ -22,6 +22,7 @@ import {
 const admin = { id: "admin-1", name: "Admin" } as unknown as SessionAdmin;
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01, 0x02, 0x03]);
 const INDEX_KEY = "test/index.json";
+const MP3 = Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00, 0x00]);
 
 function makeConfig(overrides: Partial<R2Config> = {}): R2Config {
   return {
@@ -102,6 +103,10 @@ function pngFile(name = "foto.png"): File {
   return new File([new Uint8Array(PNG)], name, { type: "image/png" });
 }
 
+function mp3File(bytes: Buffer = MP3): File {
+  return new File([new Uint8Array(bytes)], "lagu.mp3", { type: "audio/mpeg" });
+}
+
 /** Build a ProcessEnv-like map for readR2Config without touching process.env. */
 function env(values: Record<string, string>): NodeJS.ProcessEnv {
   return values as unknown as NodeJS.ProcessEnv;
@@ -169,6 +174,20 @@ describe("readR2Config", () => {
     ).toThrow(R2ConfigError);
   });
 
+  it("rejects an MP3 metadata key that collides with a media object key", () => {
+    expect(() =>
+      readR2Config(
+        env({
+          R2_ACCOUNT_ID: "acct",
+          R2_ACCESS_KEY_ID: "ak",
+          R2_SECRET_ACCESS_KEY: "sk",
+          R2_BUCKET: "vanka-universe-test",
+          R2_METADATA_KEY: "test/11111111-1111-1111-1111-111111111111.mp3",
+        }),
+      ),
+    ).toThrow(R2ConfigError);
+  });
+
   it("rejects path traversal and malformed input", () => {
     const base = {
       R2_ACCOUNT_ID: "acct",
@@ -206,6 +225,23 @@ describe("createR2MediaStore", () => {
     expect(Array.isArray(index)).toBe(true);
     expect(index).toHaveLength(1);
     expect(index[0].id).toBe(record.id);
+  });
+
+  it("stores MP3 audio and enforces its dedicated size limit", async () => {
+    const fake = createFake();
+    const store = createR2MediaStore({ client: fake.client, config: makeConfig() });
+
+    const record = await store.save(admin, mp3File());
+    expect(record.mime).toBe("audio/mpeg");
+    expect(record.kind).toBe("audio");
+    expect([...fake.objects.keys()].some((key) => key.endsWith(".mp3"))).toBe(true);
+
+    const oversized = Buffer.alloc(15 * 1024 * 1024 + 1);
+    MP3.copy(oversized);
+    await expect(store.save(admin, mp3File(oversized))).rejects.toMatchObject({
+      status: 413,
+      code: "FILE_TOO_LARGE",
+    });
   });
 
   it("lists, finds, and reads stored media", async () => {

@@ -13,7 +13,7 @@ import type { SessionAdmin } from "@/lib/auth/session";
  * needed.
  */
 
-export type MediaKind = "image" | "video";
+export type MediaKind = "image" | "video" | "audio";
 
 /**
  * Media collection pool (Tahap 4G.42B).
@@ -24,8 +24,11 @@ export type MediaKind = "image" | "video";
  *    birthday-cycle gallery (see the cycle window in `birthday/cycle.ts`).
  *  - `archive`  — the private "Arsip Ibu" pool. NEVER auto-included in the
  *    birthday gallery, and never publicly revealable through it.
+ *  - `music`    — background songs for an edition (4G.46). Deliberately its
+ *    own pool: a song is neither a memory nor an archive photo, and keeping it
+ *    out of `birthday` means no gallery query can ever pick it up.
  */
-export type MediaCollection = "birthday" | "archive";
+export type MediaCollection = "birthday" | "archive" | "music";
 
 export interface MediaRecord {
   id: string;
@@ -101,6 +104,18 @@ export class StorageConfigError extends Error {
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+/**
+ * Largest background song. A 3–4 minute MP3 at a normal bitrate is 3–6 MB, so
+ * this is generous while keeping a looped page asset from being enormous.
+ */
+export const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
+
+/** Per-kind upload cap. Single source of truth for BOTH storage providers. */
+export function maxBytesForKind(kind: MediaKind): number {
+  if (kind === "image") return MAX_IMAGE_BYTES;
+  if (kind === "audio") return MAX_AUDIO_BYTES;
+  return MAX_VIDEO_BYTES;
+}
 
 /**
  * Upper bound for a whole multipart upload request: the largest allowed file

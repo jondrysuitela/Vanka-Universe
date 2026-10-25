@@ -14,6 +14,7 @@ import {
   songForAge,
   writeMutedPreference,
 } from "@/lib/birthday/experience-music";
+import { musicMediaUrl } from "@/lib/birthday/music/schema";
 
 /**
  * Background music for the Vanka Experience.
@@ -36,12 +37,15 @@ import {
 
 export default function ExperienceMusic({
   age,
+  /** Calendar year of the edition — the key the music API is queried by. */
+  editionYear,
   /** The gift box has been opened by a click — the gesture that permits audio. */
   started,
   /** Overlay mode sits above the page; the control is placed to suit it. */
   overlay = false,
 }: {
   age: number;
+  editionYear: number;
   started: boolean;
   overlay?: boolean;
 }) {
@@ -52,6 +56,7 @@ export default function ExperienceMusic({
   const [muted, setMuted] = useState(false);
   /** Resolved once the file probe answers. Null = not probed yet. */
   const [track, setTrack] = useState<string | null>(null);
+  const [trackVolume, setTrackVolume] = useState<number | null>(null);
   /** True only after the audio element reports it can actually play. */
   const [available, setAvailable] = useState(false);
 
@@ -71,11 +76,52 @@ export default function ExperienceMusic({
   }, []);
 
   // --- resolve which file this edition uses --------------------------------
+  // Order of preference:
+  //   1. a PUBLISHED song uploaded through the admin (per-edition, in the DB);
+  //   2. the bundled file `public/music/vanka-<age>.mp3`;
+  //   3. the shared bundled fallback.
+  // Step 1 is date-gated by the same rule as the letter and gallery, so an
+  // unpublished or not-yet-revealed song is simply not offered.
   useEffect(() => {
     let active = true;
     const own = `/music/vanka-${age}.mp3`;
+    const resetFrame = requestAnimationFrame(() => {
+      setTrack(null);
+      setTrackVolume(null);
+      setAvailable(false);
+    });
 
     void (async () => {
+      let publishedId: string | null = null;
+      let publishedVolume: number | null = null;
+      try {
+        const res = await fetch(`/api/birthday/music?year=${editionYear}`, {
+          headers: { accept: "application/json" },
+        });
+        if (res.ok) {
+          const body = (await res.json()) as {
+            data?: { music?: { mediaId: string | null; volume: number | null } | null };
+          };
+          publishedId = body?.data?.music?.mediaId ?? null;
+          const volume = body?.data?.music?.volume;
+          publishedVolume =
+            typeof volume === "number" && Number.isFinite(volume)
+              ? Math.min(1, Math.max(0, volume))
+              : null;
+        }
+      } catch {
+        publishedId = null;
+      }
+      if (!active) return;
+      setTrackVolume(publishedVolume);
+
+      if (publishedId) {
+        // Uploaded music streams through its OWN date-gated byte route (a song
+        // is not a gallery memory and must not use the gallery's route).
+        setTrack(musicMediaUrl(publishedId));
+        return;
+      }
+
       let ownExists = false;
       try {
         // HEAD is enough: we only need existence, not the bytes.
@@ -89,8 +135,11 @@ export default function ExperienceMusic({
 
     return () => {
       active = false;
+      cancelAnimationFrame(resetFrame);
     };
-  }, [age]);
+  }, [age, editionYear]);
+
+  const playbackVolume = trackVolume ?? MUSIC_VOLUME;
 
   const clearFade = useCallback(() => {
     if (fadeRef.current !== null) {
@@ -148,7 +197,7 @@ export default function ExperienceMusic({
     }
 
     // Start quiet, then ramp — the song fills in under the box's own motion.
-    audio.volume = reduce ? MUSIC_VOLUME : 0;
+    audio.volume = reduce ? playbackVolume : 0;
     const attempt = audio.play();
     if (attempt && typeof attempt.catch === "function") {
       attempt.catch(() => {
@@ -157,11 +206,11 @@ export default function ExperienceMusic({
         setAvailable(false);
       });
     }
-    if (!reduce) fadeTo(MUSIC_VOLUME, MUSIC_FADE_IN_MS);
-    else audio.volume = MUSIC_VOLUME;
+    if (!reduce) fadeTo(playbackVolume, MUSIC_FADE_IN_MS);
+    else audio.volume = playbackVolume;
 
     return clearFade;
-  }, [started, muted, track, reduce, fadeTo, clearFade]);
+  }, [started, muted, track, trackVolume, playbackVolume, reduce, fadeTo, clearFade]);
 
   // --- pause when the tab is hidden, resume when it comes back -------------
   useEffect(() => {
@@ -196,9 +245,9 @@ export default function ExperienceMusic({
     }
     // Turning it back on is itself a gesture, so play() is allowed.
     if (audio) {
-      audio.volume = reduce ? MUSIC_VOLUME : 0;
+      audio.volume = reduce ? playbackVolume : 0;
       void audio.play().catch(() => {});
-      if (!reduce) fadeTo(MUSIC_VOLUME, MUSIC_FADE_IN_MS);
+      if (!reduce) fadeTo(playbackVolume, MUSIC_FADE_IN_MS);
     }
   }
 

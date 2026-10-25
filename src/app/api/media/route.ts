@@ -10,8 +10,13 @@ import { MAX_REQUEST_BYTES, listMedia, saveMediaUpload } from "@/lib/media/store
 
 const UPLOAD_CUSTOM_HEADER = "x-vanka-request";
 
-/** Valid upload pools. Each upload must land in exactly one. */
-const MEDIA_COLLECTIONS: ReadonlySet<string> = new Set(["birthday", "archive"]);
+/**
+ * Valid upload pools. Each upload must land in exactly one.
+ *
+ * `music` exists so a background song never shares a pool with memories: the
+ * gallery query filters on `birthday`, so a song can never appear in an album.
+ */
+const MEDIA_COLLECTIONS: ReadonlySet<string> = new Set(["birthday", "archive", "music"]);
 
 /** Mirrors the PATCH metadata limits so upload and edit agree. */
 const TITLE_MAX = 200;

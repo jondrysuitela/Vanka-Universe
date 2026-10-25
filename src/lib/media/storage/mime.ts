@@ -9,12 +9,15 @@
  * This module performs no I/O and imports no provider code.
  */
 
-export const MIME_MAP: Record<string, { ext: string; kind: "image" | "video" }> = {
+export const MIME_MAP: Record<string, { ext: string; kind: "image" | "video" | "audio" }> = {
   "image/jpeg": { ext: "jpg", kind: "image" },
   "image/png": { ext: "png", kind: "image" },
   "image/gif": { ext: "gif", kind: "image" },
   "image/webp": { ext: "webp", kind: "image" },
   "video/mp4": { ext: "mp4", kind: "video" },
+  // Background music. Kept in its own `audio` kind so it can never be mistaken
+  // for a photo/video in a gallery listing.
+  "audio/mpeg": { ext: "mp3", kind: "audio" },
 };
 
 /** Determine the real MIME from leading bytes; null when unsupported. */
@@ -47,6 +50,16 @@ export function sniffMime(buf: Buffer): string | null {
   }
   if (buf.length >= 12 && buf.toString("ascii", 4, 8) === "ftyp") {
     return "video/mp4";
+  }
+  // MP3 — three accepted signatures, because encoders differ:
+  //   ID3v2 tag ("ID3")            — the common case for tagged files
+  //   MPEG frame sync FF Ex       — no tag, layer II/III
+  //   MPEG frame sync FF Fx       — no tag, layer I
+  if (buf.length >= 3 && buf.toString("ascii", 0, 3) === "ID3") {
+    return "audio/mpeg";
+  }
+  if (buf.length >= 2 && buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) {
+    return "audio/mpeg";
   }
   return null;
 }
