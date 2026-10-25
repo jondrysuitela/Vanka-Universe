@@ -144,6 +144,7 @@ describe("landing page — on the birthday itself", () => {
     const overlay = document.querySelector('[role="dialog"][aria-modal="true"]');
     expect(overlay).not.toBeNull();
     expect(overlay?.getAttribute("aria-label")).toContain("Vanka Experience");
+    expect(screen.getByTestId("birthday-ambient-celebration").getAttribute("aria-hidden")).toBe("true");
     // The overlay starts at the gift box, exactly like the full page.
     expect(screen.getByRole("button", { name: /Buka hadiah/i })).toBeTruthy();
   });
