@@ -334,66 +334,111 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
     initial: (travel: number) =>
       reduce
         ? { opacity: 0 }
-        : { opacity: 0, scale: 0.94, x: travel * 42, rotateY: travel * 5 },
-    animate: reduce ? { opacity: 1 } : { opacity: 1, scale: 1, x: 0, rotateY: 0 },
+        : { opacity: 0, scale: 0.82, x: travel * 110, rotateZ: travel * 9, rotateY: travel * 8 },
+    animate: () =>
+      reduce
+        ? { opacity: 1 }
+        : { opacity: 1, scale: 1, x: 0, rotateZ: index % 2 === 0 ? -1.5 : 1.5, rotateY: 0 },
     exit: (travel: number) =>
       reduce
         ? { opacity: 0 }
-        : { opacity: 0, scale: 0.97, x: travel * -30, rotateY: travel * -4 },
+        : { opacity: 0, scale: 0.9, x: travel * -120, rotateZ: travel * -11, rotateY: travel * -6 },
   };
 
   return (
     <div className="flex w-full max-w-3xl flex-col items-center gap-4">
-      {/*
-        The two frames share ONE grid cell, so the outgoing and incoming photo
-        are stacked at full size instead of sitting side by side. Without this
-        the flex row halves both frames mid-transition and they jump back to
-        full width when the old one unmounts.
-      */}
-      <div className="grid w-full max-w-xs justify-items-center sm:max-w-sm">
-        <AnimatePresence initial={false} custom={direction}>
-          <motion.div
-            key={`${item.id}-${index}`}
-            custom={direction}
-            variants={frameVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: [0.22, 1, 0.36, 1] }}
-            className="relative col-start-1 row-start-1 flex w-full justify-center overflow-hidden rounded-3xl"
-            style={{ transformPerspective: 1200 }}
-          >
-            <GalleryFrame
-              item={item}
-              getMediaUrl={getMediaUrl}
-              kenBurns={!reduce}
-              motionIndex={index}
-              className="aspect-[3/4] w-full max-w-xs sm:max-w-sm"
-              footer={
-                <figcaption className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-5 pb-4 pt-12 text-left">
-                  <p className="font-sans text-xs text-[#f6e3b2]">{itemCaption(item)}</p>
-                  <p className="mt-0.5 font-sans text-[0.65rem] uppercase tracking-[0.25em] text-white/55">
-                    {index + 1} / {list.length}
-                  </p>
-                </figcaption>
-              }
-            />
-            {!reduce && (
-              <motion.span
+      <div className="relative grid aspect-[4/3] w-full max-w-4xl place-items-center overflow-hidden rounded-[2rem] border border-white/10 bg-[#100e17] shadow-[0_30px_100px_-32px_rgba(0,0,0,0.9)] sm:aspect-[16/10]">
+        {item.kind === "image" && item.id !== PLACEHOLDER_ITEM.id && (
+          <Image
+            key={`backdrop-${item.id}`}
+            src={getMediaUrl(item.id)}
+            alt=""
+            fill
+            sizes="(max-width: 768px) 100vw, 80vw"
+            className="scale-110 object-cover opacity-30 blur-2xl transition-opacity duration-700"
+            unoptimized
+            aria-hidden="true"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#100e17]/35 via-[#100e17]/15 to-[#100e17]/75" />
+
+        {list.length > 1 &&
+          [-1, 1].map((offset) => {
+            const cardIndex = (index + offset + list.length) % list.length;
+            const card = list[cardIndex];
+            const isImage = card.kind === "image" && card.id !== PLACEHOLDER_ITEM.id;
+
+            return (
+              <div
+                key={`album-card-${offset}-${card.id}`}
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-0 z-10"
-                style={{
-                  background:
-                    "linear-gradient(108deg, transparent 32%, rgba(246,215,122,0.18) 43%, rgba(255,248,220,0.62) 50%, rgba(246,215,122,0.18) 57%, transparent 68%)",
-                  mixBlendMode: "screen",
-                }}
-                initial={{ x: "-120%", opacity: 0 }}
-                animate={{ x: "120%", opacity: [0, 0.75, 0] }}
-                transition={{ duration: 0.95, ease: "easeInOut" }}
+                className={`absolute top-1/2 z-10 h-[56%] w-[27%] -translate-y-1/2 overflow-hidden border-[6px] border-[#f2eadb] bg-[#f2eadb] shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[9px] ${
+                  offset < 0
+                    ? "left-[3%] -rotate-[9deg] sm:left-[8%]"
+                    : "right-[3%] rotate-[8deg] sm:right-[8%]"
+                }`}
+              >
+                {isImage && (
+                  <Image
+                    src={getMediaUrl(card.id)}
+                    alt=""
+                    fill
+                    sizes="(max-width: 768px) 30vw, 25vw"
+                    className="object-cover"
+                    unoptimized
+                  />
+                )}
+              </div>
+            );
+          })}
+
+        {/*
+          The outgoing and incoming photos share one grid cell. The scrapbook
+          page-turn only runs when a gallery control changes the selected item.
+        */}
+        <div className="z-20 grid w-full place-items-center">
+          <AnimatePresence initial={false} custom={direction}>
+            <motion.div
+              key={`${item.id}-${index}`}
+              custom={direction}
+              variants={frameVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: [0.22, 1, 0.36, 1] }}
+              className="relative col-start-1 row-start-1 w-[68%] max-w-2xl border-[8px] border-[#f2eadb] bg-[#f2eadb] p-1 shadow-[0_28px_75px_-22px_rgba(0,0,0,0.9)] sm:border-[12px] sm:p-1.5"
+              style={{ transformPerspective: 1200 }}
+            >
+              <GalleryFrame
+                item={item}
+                getMediaUrl={getMediaUrl}
+                className="aspect-[4/3] w-full rounded-sm border-[#574735]/30"
+                footer={
+                  <figcaption className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-5 pb-4 pt-12 text-left">
+                    <p className="font-script text-lg text-[#fff3d9] sm:text-2xl">{itemCaption(item)}</p>
+                    <p className="mt-0.5 font-sans text-[0.65rem] uppercase tracking-[0.25em] text-white/65">
+                      {index + 1} / {list.length}
+                    </p>
+                  </figcaption>
+                }
               />
-            )}
-          </motion.div>
-        </AnimatePresence>
+              {!reduce && (
+                <motion.span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 z-10"
+                  style={{
+                    background:
+                      "linear-gradient(108deg, transparent 32%, rgba(246,215,122,0.18) 43%, rgba(255,248,220,0.62) 50%, rgba(246,215,122,0.18) 57%, transparent 68%)",
+                    mixBlendMode: "screen",
+                  }}
+                  initial={{ x: "-120%", opacity: 0 }}
+                  animate={{ x: "120%", opacity: [0, 0.75, 0] }}
+                  transition={{ duration: 0.95, ease: "easeInOut" }}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
 
       <div className="flex w-full max-w-2xl items-center justify-between gap-3">
