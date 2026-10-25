@@ -129,6 +129,7 @@ function FrameMedia({
   alt,
   kenBurns = false,
   motionIndex = 0,
+  imageFit = "cover",
 }: {
   kind: GalleryKind;
   src?: string;
@@ -143,6 +144,7 @@ function FrameMedia({
    * photo moves its own way and the movement never looks recycled.
    */
   motionIndex?: number;
+  imageFit?: "cover" | "contain";
 }) {
   if (kind === "image" && src) {
     // `unoptimized` is REQUIRED here: every media URL is an API route
@@ -156,7 +158,7 @@ function FrameMedia({
         alt={alt}
         fill
         sizes="(max-width: 768px) 100vw, 50vw"
-        className="object-cover"
+        className={imageFit === "contain" ? "object-contain" : "object-cover"}
         unoptimized
       />
     );
@@ -236,6 +238,7 @@ function PhotoFrame({
   footer,
   kenBurns,
   motionIndex,
+  imageFit,
 }: {
   kind: GalleryKind;
   src?: string;
@@ -244,6 +247,7 @@ function PhotoFrame({
   footer?: ReactNode;
   kenBurns?: boolean;
   motionIndex?: number;
+  imageFit?: "cover" | "contain";
 }) {
   return (
     <figure
@@ -255,6 +259,7 @@ function PhotoFrame({
         alt={alt}
         kenBurns={kenBurns}
         motionIndex={motionIndex}
+        imageFit={imageFit}
       />
       {footer}
     </figure>
@@ -273,6 +278,7 @@ function GalleryFrame({
   getMediaUrl,
   kenBurns,
   motionIndex,
+  imageFit,
 }: {
   item: GalleryItem;
   className?: string;
@@ -280,6 +286,7 @@ function GalleryFrame({
   getMediaUrl: (id: string) => string;
   kenBurns?: boolean;
   motionIndex?: number;
+  imageFit?: "cover" | "contain";
 }) {
   if (item.id === PLACEHOLDER_ITEM.id) {
     return (
@@ -301,6 +308,7 @@ function GalleryFrame({
       footer={footer}
       kenBurns={kenBurns}
       motionIndex={motionIndex}
+      imageFit={imageFit}
     />
   );
 }
@@ -336,42 +344,46 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
         ? { opacity: 0 }
         : {
             opacity: 0,
-            scale: 0.68,
-            x: travel * 190,
-            y: 28,
-            rotateZ: travel * 16,
-            rotateY: travel * 42,
-            filter: "blur(8px) brightness(1.6)",
+            scale: 0.78,
+            x: travel * 170,
+            y: 48,
+            rotateZ: travel * 14,
+            rotateY: travel * 58,
+            filter: "blur(5px) brightness(1.3)",
           },
     animate: () =>
       reduce
         ? { opacity: 1 }
         : {
             opacity: 1,
-            scale: [0.92, 1.035, 1],
-            x: [direction * -24, direction * 8, 0],
-            y: [12, -5, 0],
-            rotateZ: [direction * -5, direction * 2, index % 2 === 0 ? -1.5 : 1.5],
-            rotateY: [direction * -16, direction * 5, 0],
-            filter: ["blur(3px) brightness(1.35)", "blur(0px) brightness(1)"],
+            scale: [0.94, 1.025, 1],
+            x: [direction * -34, direction * 12, 0],
+            y: [24, -8, 0],
+            rotateZ: [direction * -7, direction * 2, index % 2 === 0 ? -2 : 2],
+            rotateY: [direction * -18, direction * 5, 0],
+            filter: ["blur(2px) brightness(1.18)", "blur(0px) brightness(1)"],
           },
     exit: (travel: number) =>
       reduce
         ? { opacity: 0 }
         : {
             opacity: 0,
-            scale: 0.82,
-            x: travel * -190,
-            y: -24,
-            rotateZ: travel * -15,
-            rotateY: travel * -38,
-            filter: "blur(7px) brightness(1.5)",
+            scale: 0.88,
+            x: travel * -165,
+            y: -38,
+            rotateZ: travel * -14,
+            rotateY: travel * -52,
+            filter: "blur(4px) brightness(1.25)",
           },
   };
 
   return (
     <div className="flex w-full max-w-3xl flex-col items-center gap-4">
-      <div className="relative grid aspect-[4/3] w-full max-w-4xl place-items-center overflow-hidden rounded-[2rem] border border-white/10 bg-[#100e17] shadow-[0_30px_100px_-32px_rgba(0,0,0,0.9)] sm:aspect-[16/10]">
+      <div
+        data-testid="memory-scrapbook-stage"
+        className="relative grid aspect-[4/5] w-full max-w-lg place-items-center overflow-hidden rounded-[2rem] border border-white/10 bg-[#100e17] shadow-[0_30px_100px_-32px_rgba(0,0,0,0.9)]"
+        style={{ perspective: 1400 }}
+      >
         <AnimatePresence initial={false} custom={direction}>
           {item.kind === "image" && item.id !== PLACEHOLDER_ITEM.id && (
             <motion.div
@@ -397,52 +409,67 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
         </AnimatePresence>
         <div className="absolute inset-0 bg-gradient-to-b from-[#100e17]/35 via-[#100e17]/15 to-[#100e17]/75" />
 
-        {list.length > 1 &&
-          [-1, 1].map((offset) => {
-            const cardIndex = (index + offset + list.length) % list.length;
-            const card = list[cardIndex];
-            const isImage = card.kind === "image" && card.id !== PLACEHOLDER_ITEM.id;
+        {list.length > 1 && (
+          <AnimatePresence initial={false} custom={direction}>
+            {[-1, 1].map((offset) => {
+              const cardIndex = (index + offset + list.length) % list.length;
+              const card = list[cardIndex];
+              const isImage = card.kind === "image" && card.id !== PLACEHOLDER_ITEM.id;
 
-            return (
-              <motion.div
-                key={`album-card-${offset}-${card.id}`}
-                initial={
-                  reduce
-                    ? { opacity: 0 }
-                    : { opacity: 0, x: offset * 60, y: 24, rotate: offset * 18, scale: 0.78 }
-                }
-                animate={
-                  reduce
-                    ? { opacity: 0.82 }
-                    : {
-                        opacity: 0.82,
-                        x: 0,
-                        y: 0,
-                        rotate: offset < 0 ? -9 : 8,
-                        scale: 1,
-                      }
-                }
-                transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: [0.22, 1, 0.36, 1] }}
-                aria-hidden="true"
-                className={`absolute top-1/2 z-10 h-[56%] w-[27%] -translate-y-1/2 overflow-hidden border-[6px] border-[#f2eadb] bg-[#f2eadb] shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[9px] ${
-                  offset < 0
-                    ? "left-[3%] -rotate-[9deg] sm:left-[8%]"
-                    : "right-[3%] rotate-[8deg] sm:right-[8%]"
-                }`}
-              >
-                {isImage && (
-                  <Image
-                    src={getMediaUrl(card.id)}
-                    alt=""
-                    fill
-                    sizes="(max-width: 768px) 30vw, 25vw"
-                    className="object-cover"
-                    unoptimized
-                  />
-                )}
-              </motion.div>
-            );
-          })}
+              return (
+                <motion.div
+                  key={`album-card-${offset}-${card.id}`}
+                  custom={direction}
+                  initial={
+                    reduce
+                      ? { opacity: 0 }
+                      : { opacity: 0, x: offset * 60, y: 24, rotate: offset * 18, scale: 0.78 }
+                  }
+                  animate={
+                    reduce
+                      ? { opacity: 0.82 }
+                      : {
+                          opacity: 0.82,
+                          x: 0,
+                          y: 0,
+                          rotate: offset < 0 ? -9 : 8,
+                          scale: 1,
+                        }
+                  }
+                  exit={
+                    reduce
+                      ? { opacity: 0 }
+                      : {
+                          opacity: 0,
+                          x: direction * -90,
+                          y: 30,
+                          rotate: offset * 18,
+                          scale: 0.82,
+                        }
+                  }
+                  transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: [0.22, 1, 0.36, 1] }}
+                  aria-hidden="true"
+                  className={`absolute top-1/2 z-10 aspect-[3/4] w-[30%] -translate-y-1/2 overflow-hidden border-[6px] border-[#f2eadb] bg-[#f2eadb] p-1 shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[9px] sm:p-1.5 ${
+                    offset < 0
+                      ? "left-[2%] -rotate-[12deg] sm:left-[5%]"
+                      : "right-[2%] rotate-[11deg] sm:right-[5%]"
+                  }`}
+                >
+                  {isImage && (
+                    <Image
+                      src={getMediaUrl(card.id)}
+                      alt=""
+                      fill
+                      sizes="(max-width: 768px) 30vw, 25vw"
+                      className="object-contain"
+                      unoptimized
+                    />
+                  )}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        )}
 
         {/*
           The outgoing and incoming photos share one grid cell. The scrapbook
@@ -458,21 +485,30 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
               animate="animate"
               exit="exit"
               transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: [0.22, 1, 0.36, 1] }}
-              className="relative col-start-1 row-start-1 w-[68%] max-w-2xl border-[8px] border-[#f2eadb] bg-[#f2eadb] p-1 shadow-[0_28px_75px_-22px_rgba(0,0,0,0.9)] sm:border-[12px] sm:p-1.5"
-              style={{ transformPerspective: 1200 }}
+              data-testid="memory-scrapbook-photo"
+              className="relative col-start-1 row-start-1 w-[62%] max-w-sm border-[8px] border-[#f2eadb] bg-[#f2eadb] p-1.5 shadow-[0_28px_75px_-22px_rgba(0,0,0,0.9)] sm:border-[12px] sm:p-2"
+              style={{ transformPerspective: 1400, transformStyle: "preserve-3d" }}
             >
               <GalleryFrame
                 item={item}
                 getMediaUrl={getMediaUrl}
-                className="aspect-[4/3] w-full rounded-sm border-[#574735]/30"
+                imageFit="contain"
+                className="aspect-[3/4] w-full rounded-sm border-[#574735]/30 bg-[#17130f]"
                 footer={
-                  <figcaption className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-5 pb-4 pt-12 text-left">
+                  <figcaption className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 pb-4 pt-12 text-left sm:px-5">
                     <p className="font-script text-lg text-[#fff3d9] sm:text-2xl">{itemCaption(item)}</p>
                     <p className="mt-0.5 font-sans text-[0.65rem] uppercase tracking-[0.25em] text-white/65">
                       {index + 1} / {list.length}
                     </p>
                   </figcaption>
                 }
+              />
+              <motion.span
+                aria-hidden="true"
+                className="pointer-events-none absolute -top-2 left-1/2 z-20 h-7 w-20 -translate-x-1/2 rotate-[-3deg] border-x border-white/20 bg-[#e9d8a9]/80 shadow-sm sm:-top-3 sm:h-9 sm:w-28"
+                initial={false}
+                animate={reduce ? { opacity: 0 } : { opacity: [0, 0.95, 0.72], y: [8, 0, 0] }}
+                transition={{ duration: reduce ? 0 : 0.65, ease: "easeOut" }}
               />
               {!reduce && (
                 <motion.span
@@ -483,9 +519,9 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                       "linear-gradient(108deg, transparent 32%, rgba(246,215,122,0.18) 43%, rgba(255,248,220,0.62) 50%, rgba(246,215,122,0.18) 57%, transparent 68%)",
                     mixBlendMode: "screen",
                   }}
-                  initial={{ x: "-120%", opacity: 0 }}
-                  animate={{ x: "120%", opacity: [0, 0.75, 0] }}
-                  transition={{ duration: 0.95, ease: "easeInOut" }}
+                  initial={{ x: "-140%", opacity: 0 }}
+                  animate={{ x: "140%", opacity: [0, 0.85, 0] }}
+                  transition={{ duration: 1.25, delay: 0.12, ease: "easeInOut" }}
                 />
               )}
             </motion.div>
