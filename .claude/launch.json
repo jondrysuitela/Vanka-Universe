@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vanka-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "vanka-start",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "start", "-p", "3010"],
+      "port": 3010
+    },
+    {
+      "name": "vanka-future",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:/Users/HP/AppData/Local/Temp/vanka-clock/start-future.cjs"],
+      "port": 3040
+    }
+  ]
+}

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import { useToast } from "@/components/admin/ui/ToastProvider";
-import { compressForUpload, describeSavings } from "@/lib/media/compress";
+import { compressForUpload } from "@/lib/media/compress";
 import ScrapbookImageCropper from "@/components/admin/media/ScrapbookImageCropper";
 import {
   EMPTY_GALLERY_STATE,
@@ -108,6 +108,7 @@ function validateUploadFile(file: File): { kind: UploadKind } | { error: string 
 }
 
 interface SelectedUpload {
+  id: string;
   file: File;
   uploadFile?: File;
   name: string;
@@ -149,27 +150,37 @@ export default function AdminArchiveGallery() {
 
   // Arsip-ibu upload widget state.
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadSelected, setUploadSelected] = useState<SelectedUpload | null>(null);
-  const [uploadCropOpen, setUploadCropOpen] = useState(false);
+  const [uploadSelected, setUploadSelected] = useState<SelectedUpload[]>([]);
+  const [uploadCropIndex, setUploadCropIndex] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    done: number;
+    total: number;
+    name: string;
+  } | null>(null);
+  const uploadObjectUrls = useRef(new Set<string>());
 
   const dirty = !galleryStatesEqual(gallery, baseline);
 
-  // Keep original and cropped preview URLs alive independently.
+  // Revoke preview URLs when the upload panel unmounts.
   useEffect(() => {
-    const url = uploadSelected?.url;
+    const urls = uploadObjectUrls.current;
     return () => {
-      if (url) URL.revokeObjectURL(url);
+      for (const url of urls) URL.revokeObjectURL(url);
+      urls.clear();
     };
-  }, [uploadSelected?.url]);
+  }, []);
 
-  useEffect(() => {
-    const url = uploadSelected?.uploadUrl;
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [uploadSelected?.uploadUrl]);
+  function makeUploadObjectUrl(file: File): string {
+    const url = URL.createObjectURL(file);
+    uploadObjectUrls.current.add(url);
+    return url;
+  }
+
+  function revokeUploadObjectUrl(url?: string) {
+    if (url && uploadObjectUrls.current.delete(url)) URL.revokeObjectURL(url);
+  }
 
   // Initial load: media library + saved gallery. Never overwrites local edits
   // (this only runs on mount, before any edit exists).
@@ -226,59 +237,84 @@ export default function AdminArchiveGallery() {
   }
 
   function clearUploadSelection() {
-    setUploadSelected(null);
-    setUploadCropOpen(false);
+    for (const selected of uploadSelected) {
+      revokeUploadObjectUrl(selected.url);
+      revokeUploadObjectUrl(selected.uploadUrl);
+    }
+    setUploadSelected([]);
+    setUploadCropIndex(null);
     setUploadError(null);
+    setUploadProgress(null);
     setUploadOpen(false);
   }
 
   function handleUploadFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    // Allow re-selecting the same file name/content later.
+    const files = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!file) return;
+    if (files.length === 0) return;
 
-    const result = validateUploadFile(file);
-    if ("error" in result) {
-      setUploadError(result.error);
-      return;
+    const accepted: SelectedUpload[] = [];
+    const rejected: string[] = [];
+    for (const file of files) {
+      const result = validateUploadFile(file);
+      if ("error" in result) {
+        rejected.push(`${file.name}: ${result.error}`);
+        continue;
+      }
+      accepted.push({
+        id: crypto.randomUUID(),
+        file,
+        name: file.name,
+        size: file.size,
+        kind: result.kind,
+        url: makeUploadObjectUrl(file),
+      });
     }
-    setUploadError(null);
-    setUploadSelected({
-      file,
-      name: file.name,
-      size: file.size,
-      kind: result.kind,
-      url: URL.createObjectURL(file),
-    });
-    setUploadCropOpen(false);
+    setUploadSelected((current) => [...current, ...accepted]);
+    setUploadError(rejected.length > 0 ? `File dilewati:\n${rejected.join("\n")}` : null);
+    setUploadCropIndex(null);
+    setUploadProgress(null);
+  }
+
+  function removeSelectedUpload(id: string) {
+    const selected = uploadSelected.find((item) => item.id === id);
+    if (!selected) return;
+    revokeUploadObjectUrl(selected.url);
+    revokeUploadObjectUrl(selected.uploadUrl);
+    setUploadSelected((current) => current.filter((item) => item.id !== id));
+    setUploadCropIndex(null);
   }
 
   function applyUploadCrop(file: File) {
+    if (uploadCropIndex === null) return;
+    const selected = uploadSelected[uploadCropIndex];
+    if (!selected) return;
+    revokeUploadObjectUrl(selected.uploadUrl);
+    const uploadUrl = makeUploadObjectUrl(file);
     setUploadSelected((current) =>
-      current
-        ? { ...current, uploadFile: file, uploadUrl: URL.createObjectURL(file) }
-        : current,
+      current.map((item, index) =>
+        index === uploadCropIndex ? { ...item, uploadFile: file, uploadUrl } : item,
+      ),
     );
-    setUploadCropOpen(false);
+    setUploadCropIndex(null);
   }
 
-  async function handleUploadSave() {
-    if (!uploadSelected || uploading) return;
-    setUploading(true);
-    setUploadError(null);
+  function clearUploadCrop() {
+    setUploadCropIndex(null);
+  }
+
+  async function uploadOne(selected: SelectedUpload): Promise<void> {
+    let uploadStage: "compress" | "prepare" | "r2" | "verify" = "compress";
     try {
-      // Shrink photos in the browser first (videos and GIFs pass through), so
-      // the archive renders modest files instead of camera-sized originals.
       const shrunk = await compressForUpload(
-        uploadSelected.uploadFile ?? uploadSelected.file,
-        uploadSelected.kind,
+        selected.uploadFile ?? selected.file,
+        selected.kind,
       );
-      if (shrunk.file.size > UPLOAD_MAX_IMAGE && uploadSelected.kind === "image") {
-        setUploadError("Ukuran foto hasil crop masih melebihi 10 MB.");
-        return;
+      if (shrunk.file.size > UPLOAD_MAX_IMAGE && selected.kind === "image") {
+        throw new Error("Ukuran foto hasil crop masih melebihi 10 MB.");
       }
 
+      uploadStage = "prepare";
       const initResponse = await fetch("/api/media/direct-upload", {
         method: "POST",
         headers: {
@@ -303,17 +339,16 @@ export default function AdminArchiveGallery() {
         ]
           .filter(Boolean)
           .join(" · ");
-        setUploadError(
+        throw new Error(
           initBody?.error?.message ??
-            `Server gagal menyiapkan unggahan (${responseInfo}). Coba lagi; bila berulang, kirim kode HTTP ini untuk diperiksa.`,
+            `Server gagal menyiapkan unggahan (${responseInfo}).`,
         );
-        return;
       }
       if (!isDirectUploadPlan(initBody.data)) {
-        setUploadError("Server mengirim instruksi unggah yang tidak valid.");
-        return;
+        throw new Error("Server mengirim instruksi unggah yang tidak valid.");
       }
 
+      uploadStage = "r2";
       const objectResponse = await fetch(initBody.data.url, {
         method: "PUT",
         headers: initBody.data.headers,
@@ -321,14 +356,14 @@ export default function AdminArchiveGallery() {
       });
       if (!objectResponse.ok) {
         const responseType = objectResponse.headers.get("content-type");
-        setUploadError(
+        throw new Error(
           `Gagal mengunggah ke penyimpanan (HTTP ${objectResponse.status}${
             responseType ? ` · respons ${responseType.split(";")[0]}` : ""
-          }). Coba lagi; bila berulang, kirim kode HTTP ini untuk diperiksa.`,
+          }).`,
         );
-        return;
       }
 
+      uploadStage = "verify";
       const completeResponse = await fetch("/api/media/direct-upload", {
         method: "POST",
         headers: {
@@ -348,24 +383,68 @@ export default function AdminArchiveGallery() {
         ]
           .filter(Boolean)
           .join(" · ");
-        setUploadError(
+        throw new Error(
           completeBody?.error?.message ??
-            `Server gagal memverifikasi unggahan (${responseInfo}). Coba lagi; bila berulang, kirim kode HTTP ini untuk diperiksa.`,
+            `Server gagal memverifikasi unggahan (${responseInfo}).`,
         );
-        return;
       }
-      clearUploadSelection();
-      const savings = describeSavings(shrunk);
-      showToast({
-        title: "File tersimpan",
-        message: savings
-          ? `File tersimpan di server (dikompres ${savings}). Tambahkan ke susunan galeri lalu simpan galeri untuk menampilkannya.`
-          : "File tersimpan di server. Tambahkan ke susunan galeri lalu simpan galeri untuk menampilkannya.",
-        type: "success",
-      });
-      await refreshMedia();
-    } catch {
-      setUploadError("Koneksi ke server atau R2 gagal. Periksa koneksi dan CORS bucket R2.");
+    } catch (error) {
+      if (error instanceof Error && !(error instanceof TypeError) && error.message) throw error;
+      const messages = {
+        compress: "File gagal disiapkan di browser. Coba pilih file lagi.",
+        prepare: "Koneksi ke server gagal saat menyiapkan unggahan. Periksa deployment dan konfigurasi db-r2 di Vercel.",
+        r2: "Browser tidak dapat menghubungi R2. Periksa CORS bucket untuk origin situs dan konfigurasi bucket R2 di Vercel.",
+        verify: "File mungkin sudah berada di R2, tetapi server gagal memverifikasinya. Coba unggah ulang; periksa log Vercel jika berulang.",
+      } satisfies Record<typeof uploadStage, string>;
+      throw new Error(messages[uploadStage]);
+    }
+  }
+
+  async function handleUploadSave() {
+    if (uploadSelected.length === 0 || uploading) return;
+    setUploading(true);
+    setUploadError(null);
+    const pending = [...uploadSelected];
+    const completed: SelectedUpload[] = [];
+    const failed: string[] = [];
+    setUploadProgress({ done: 0, total: pending.length, name: pending[0].name });
+    try {
+      for (const [index, selected] of pending.entries()) {
+        setUploadProgress({ done: index, total: pending.length, name: selected.name });
+        try {
+          await uploadOne(selected);
+          completed.push(selected);
+        } catch (error) {
+          failed.push(
+            `${selected.name}: ${error instanceof Error ? error.message : "Upload gagal."}`,
+          );
+        }
+      }
+
+      for (const selected of completed) {
+        revokeUploadObjectUrl(selected.url);
+        revokeUploadObjectUrl(selected.uploadUrl);
+      }
+      setUploadSelected((current) =>
+        current.filter((selected) => !completed.some((done) => done.id === selected.id)),
+      );
+
+      if (completed.length > 0) {
+        await refreshMedia();
+        showToast({
+          title: completed.length === 1 ? "File tersimpan" : "Semua file tersimpan",
+          message: `${completed.length} file berhasil diunggah. Tambahkan ke susunan galeri lalu simpan galeri untuk menampilkannya.`,
+          type: "success",
+        });
+      }
+
+      if (failed.length > 0) {
+        setUploadError(`Gagal mengunggah ${failed.length} file:\n${failed.join("\n")}`);
+      } else {
+        setUploadSelected([]);
+        setUploadProgress(null);
+        setUploadOpen(false);
+      }
     } finally {
       setUploading(false);
     }
@@ -503,92 +582,91 @@ export default function AdminArchiveGallery() {
           </div>
 
           <label className="flex w-full cursor-pointer items-center justify-center rounded-xl border border-dashed border-white/20 px-4 py-6 text-sm text-[#fdf3d8]/80 transition-colors hover:border-[#a8e6cf]/60 hover:text-[#fdf3d8] focus-within:border-[#a8e6cf]/60">
-            <span>Klik untuk memilih file dari perangkat…</span>
+            <span>Pilih satu atau beberapa file dari perangkat…</span>
             <input
               type="file"
               accept={UPLOAD_ACCEPT}
+              multiple
+              disabled={uploading}
               onChange={handleUploadFileChange}
               className="sr-only"
-              aria-label="Pilih file media arsip"
+              aria-label="Pilih beberapa file media arsip"
             />
           </label>
 
           {uploadError && (
             <p
               role="alert"
-              className="rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+              className="whitespace-pre-line rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
             >
               {uploadError}
             </p>
           )}
 
-          {uploadSelected ? (
+          {uploadProgress && (
+            <p role="status" className="text-sm text-[#a8e6cf]">
+              Mengunggah {uploadProgress.done + 1} dari {uploadProgress.total}: {uploadProgress.name}
+            </p>
+          )}
+
+          {uploadSelected.length > 0 ? (
             <div className="space-y-4">
-              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
-                <div className="flex items-center justify-center">
-                  {uploadSelected.kind === "image" ? (
-                    // Blob object URL: next/image cannot optimize it, so a plain
-                    // <img> is used deliberately for the local preview.
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={uploadSelected.uploadUrl ?? uploadSelected.url}
-                      alt={`Pratinjau gambar ${uploadSelected.name}`}
-                      decoding="async"
-                      className={`max-h-80 w-auto object-contain ${uploadSelected.uploadFile ? "aspect-[4/5]" : ""}`}
-                    />
-                  ) : (
-                    <video
-                      src={uploadSelected.url}
-                      controls
-                      preload="metadata"
-                      aria-label={`Pratinjau video ${uploadSelected.name}`}
-                      className="max-h-80 w-full object-contain"
-                    />
-                  )}
-                </div>
-              </div>
-
-              {uploadSelected.kind === "image" && uploadSelected.file.type !== "image/gif" && (
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setUploadCropOpen(true)}
-                    className="rounded-lg border border-[#a8e6cf]/45 px-4 py-2 text-sm text-[#a8e6cf] transition hover:bg-[#a8e6cf]/10"
+              <ul className="space-y-3">
+                {uploadSelected.map((selected, index) => (
+                  <li
+                    key={selected.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3"
                   >
-                    {uploadSelected.uploadFile ? "Atur ulang crop 4:5" : "Crop foto 4:5"}
-                  </button>
-                  {uploadSelected.uploadFile && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setUploadSelected((current) =>
-                          current
-                            ? { ...current, uploadFile: undefined, uploadUrl: undefined }
-                            : current,
-                        )
-                      }
-                      className="text-sm text-[#fdf3d8]/65 underline underline-offset-4 hover:text-[#fdf3d8]"
-                    >
-                      Gunakan foto asli
-                    </button>
-                  )}
-                </div>
-              )}
-
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-[#fdf3d8]/85 space-y-1">
-                <p className="break-all">
-                  <span className="text-[#fdf3d8]/60">Nama file:</span> {uploadSelected.name}
-                </p>
-                <p>
-                  <span className="text-[#fdf3d8]/60">Ukuran:</span>{" "}
-                  {uploadFormatBytes(uploadSelected.uploadFile?.size ?? uploadSelected.size)}
-                </p>
-                <p className="pt-1 font-medium text-[#a8e6cf]">
-                  {uploadSelected.uploadFile
-                    ? "Hasil crop 4:5 siap diupload. Foto asli di perangkat tidak diubah."
-                    : "File siap diunggah ke server dan masuk ke Pustaka Arsip Privat."}
-                </p>
-              </div>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="h-14 w-20 shrink-0 overflow-hidden rounded-md bg-black/50">
+                        {selected.kind === "image" ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={selected.uploadUrl ?? selected.url}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <video
+                            src={selected.url}
+                            preload="metadata"
+                            aria-label={`Pratinjau ${selected.name}`}
+                            className="h-full w-full object-contain"
+                          />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="break-all text-sm text-[#fdf3d8]/90">{selected.name}</p>
+                        <p className="text-xs text-[#fdf3d8]/60">
+                          {selected.kind === "video" ? "Video" : "Gambar"} ·{" "}
+                          {uploadFormatBytes(selected.uploadFile?.size ?? selected.size)}
+                          {selected.uploadFile ? " · crop 4:5" : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {selected.kind === "image" && selected.file.type !== "image/gif" && (
+                        <button
+                          type="button"
+                          disabled={uploading}
+                          onClick={() => setUploadCropIndex(index)}
+                          className="text-xs text-[#a8e6cf] underline underline-offset-4 disabled:opacity-50"
+                        >
+                          {selected.uploadFile ? "Atur crop" : "Crop 4:5"}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={uploading}
+                        onClick={() => removeSelectedUpload(selected.id)}
+                        className="text-xs text-red-200 underline underline-offset-4 disabled:opacity-50"
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button
@@ -597,21 +675,26 @@ export default function AdminArchiveGallery() {
                   disabled={uploading}
                   className="rounded-lg bg-gradient-to-r from-[#a8e6cf] to-[#d8f3e4] px-6 py-2.5 text-sm font-semibold text-[#050814] transition-opacity hover:opacity-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8e6cf] disabled:opacity-50"
                 >
-                  {uploading ? "Menyimpan…" : "Simpan ke Server"}
+                  {uploading
+                    ? `Mengunggah ${uploadProgress?.done ?? 0}/${uploadProgress?.total ?? uploadSelected.length}…`
+                    : `Unggah ${uploadSelected.length} File ke Server`}
                 </button>
                 <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-white/15 px-6 py-2.5 text-sm text-[#fdf3d8]/90 transition-colors hover:bg-white/5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#a8e6cf]">
-                  Ganti File
+                  Tambah File
                   <input
                     type="file"
                     accept={UPLOAD_ACCEPT}
+                    multiple
+                    disabled={uploading}
                     onChange={handleUploadFileChange}
                     className="sr-only"
-                    aria-label="Ganti file media arsip"
+                    aria-label="Tambah beberapa file media arsip"
                   />
                 </label>
                 <button
                   type="button"
                   onClick={clearUploadSelection}
+                  disabled={uploading}
                   className="rounded-lg border border-white/15 px-6 py-2.5 text-sm text-[#fdf3d8]/90 transition-colors hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f6d77a]"
                 >
                   Batal
@@ -630,12 +713,12 @@ export default function AdminArchiveGallery() {
         </section>
       )}
 
-      {uploadCropOpen &&
-        uploadSelected?.kind === "image" &&
-        uploadSelected.file.type !== "image/gif" && (
+      {uploadCropIndex !== null &&
+        uploadSelected[uploadCropIndex]?.kind === "image" &&
+        uploadSelected[uploadCropIndex].file.type !== "image/gif" && (
           <ScrapbookImageCropper
-            file={uploadSelected.file}
-            onCancel={() => setUploadCropOpen(false)}
+            file={uploadSelected[uploadCropIndex].file}
+            onCancel={clearUploadCrop}
             onApply={applyUploadCrop}
           />
         )}
