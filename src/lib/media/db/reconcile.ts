@@ -15,8 +15,8 @@ import {
  *
  * Two DISTINCT cases are handled differently:
  *   - object ABSENT  -> the row is dead metadata with no bytes. Deleting the row
- *     is safe and loses nothing. We only do it after an `exists()` probe says the
- *     object is really missing — never on a guess.
+ *     is safe and loses nothing, unless a direct-upload staging object is still
+ *     present; that object must not be promoted because it has not been verified.
  *   - object PRESENT -> the bytes exist but the upload never finished. The safe
  *     recovery is to promote the row to `ready` (do NOT delete the object).
  *
@@ -102,8 +102,26 @@ export async function reconcilePendingMediaObjects(
       continue;
     }
 
-    // Verified presence probe. Absence is only trusted when `exists` is false.
+    // A direct upload has an isolated staging key derived from its final key.
+    // Never promote unverified staged bytes or remove their tracking row.
     const present = await options.objects.exists(row.storage_key);
+    if (!present) {
+      const slash = row.storage_key.lastIndexOf("/");
+      if (slash >= 0) {
+        const fileName = row.storage_key.slice(slash + 1);
+        const stagingKey = `${row.storage_key.slice(0, slash + 1)}pending/${fileName}`;
+        if (await options.objects.exists(stagingKey)) {
+          skipped += 1;
+          findings.push({
+            id: row.id,
+            action: "skip",
+            reason: "direct-upload-staging-present",
+          });
+          continue;
+        }
+      }
+    }
+
     const action: PendingReconcileAction = present ? "mark-ready" : "delete-row";
     const reason = present ? "object-present" : "object-missing";
 

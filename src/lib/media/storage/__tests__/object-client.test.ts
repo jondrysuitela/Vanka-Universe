@@ -29,7 +29,14 @@ function notFound(): Error {
 function createFake() {
   const objects = new Map<string, Buffer>();
   const calls: string[] = [];
-  const sent: Array<{ name: string; bucket: string | undefined; key: string | undefined }> = [];
+  const sent: Array<{
+    name: string;
+    bucket: string | undefined;
+    key: string | undefined;
+    copySourceIfMatch?: string;
+    ifMatch?: string;
+  }> = [];
+  const contentTypes = new Map<string, string>();
   let mode: "ok" | "get-missing" | "get-error" | "head-missing" | "head-error" | "delete-missing" | "delete-error" = "ok";
 
   const client = {
@@ -37,10 +44,26 @@ function createFake() {
       const name = (command as { constructor: { name: string } }).constructor.name;
       const input = (command as { input: { Key: string; Bucket?: string; Body?: Buffer } }).input;
       calls.push(`${name}`);
-      sent.push({ name, bucket: input.Bucket, key: input.Key });
+      sent.push({
+        name,
+        bucket: input.Bucket,
+        key: input.Key,
+        copySourceIfMatch: (command as { input: { CopySourceIfMatch?: string } }).input.CopySourceIfMatch,
+        ifMatch: (command as { input: { IfMatch?: string } }).input.IfMatch,
+      });
 
       if (name === "PutObjectCommand") {
         objects.set(input.Key, Buffer.from(input.Body as Buffer));
+        contentTypes.set(input.Key, String((command as { input: { ContentType?: string } }).input.ContentType));
+        return {};
+      }
+      if (name === "CopyObjectCommand") {
+        const copyInput = (command as { input: { CopySource: string; ContentType?: string } }).input;
+        const sourceKey = decodeURIComponent(copyInput.CopySource.slice(CONFIG.bucket.length + 1));
+        const source = objects.get(sourceKey);
+        if (!source) throw notFound();
+        objects.set(input.Key, Buffer.from(source));
+        contentTypes.set(input.Key, String(copyInput.ContentType));
         return {};
       }
       if (name === "GetObjectCommand") {
@@ -52,7 +75,11 @@ function createFake() {
       if (name === "HeadObjectCommand") {
         if (mode === "head-error") throw new Error("boom");
         if (mode === "head-missing" || !objects.has(input.Key)) throw notFound();
-        return {};
+        return {
+          ContentLength: objects.get(input.Key)!.byteLength,
+          ContentType: contentTypes.get(input.Key),
+          ETag: '"etag"',
+        };
       }
       if (name === "DeleteObjectCommand") {
         if (mode === "delete-error") throw new Error("boom");
@@ -105,6 +132,51 @@ describe("createR2ObjectClient", () => {
     expect(await objects.exists("test/gone.png")).toBe(false);
   });
 
+  it("presigns a PUT with the requested content type, size, and lifetime", async () => {
+    const fake = createFake();
+    const presignPut = vi.fn(async () => "https://r2.example/signed");
+    const objects = createR2ObjectClient({
+      client: fake.client,
+      config: CONFIG,
+      presignPut,
+    });
+
+    await expect(objects.presignPut("test/pending/id.png", "image/png", 123, 600)).resolves.toBe(
+      "https://r2.example/signed",
+    );
+    expect(presignPut).toHaveBeenCalledWith("test/pending/id.png", "image/png", 123, 600);
+  });
+
+  it("does not add an empty automatic checksum to presigned direct uploads", async () => {
+    const objects = createR2ObjectClient({ config: CONFIG });
+    const url = new URL(
+      await objects.presignPut("test/pending/id.mp4", "video/mp4", 123, 600),
+    );
+
+    expect(url.searchParams.get("X-Amz-SignedHeaders")).toBe("content-length;host");
+    expect(url.searchParams.has("x-amz-checksum-crc32")).toBe(false);
+  });
+
+  it("inspects object metadata and copies staged bytes to a final key", async () => {
+    const fake = createFake();
+    const objects = createR2ObjectClient({ client: fake.client, config: CONFIG });
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x09]);
+    await objects.put("test/pending/id.png", bytes, "image/png");
+
+    const inspected = await objects.inspect("test/pending/id.png");
+    expect(inspected).toEqual({
+      size: bytes.byteLength,
+      contentType: "image/png",
+      etag: '"etag"',
+      prefix: bytes,
+    });
+    expect(fake.sent.find((command) => command.name === "GetObjectCommand")?.ifMatch).toBe('"etag"');
+    await objects.copy("test/pending/id.png", "test/id.png", "image/png", '"etag"');
+    const copyCommand = fake.sent.find((command) => command.name === "CopyObjectCommand");
+    expect(copyCommand?.copySourceIfMatch).toBe('"etag"');
+    expect(fake.objects.get("test/id.png")).toEqual(bytes);
+  });
+
   it("propagates a non-404 HEAD error", async () => {
     const fake = createFake();
     const objects = createR2ObjectClient({ client: fake.client, config: CONFIG });
@@ -133,7 +205,7 @@ describe("createR2ObjectClient", () => {
     await expect(objects.delete("test/x.png")).rejects.toThrow("boom");
   });
 
-  it("keeps the bucket private: only path-style object commands, never URLs/presigned", async () => {
+  it("keeps ordinary storage operations private and path-style", async () => {
     const fake = createFake();
     const objects = createR2ObjectClient({ client: fake.client, config: CONFIG });
     const bytes = Buffer.from([1, 2, 3]);
@@ -143,9 +215,6 @@ describe("createR2ObjectClient", () => {
     await objects.exists("test/a.png");
     await objects.delete("test/a.png");
 
-    // Only the four raw S3 object commands may ever leave this client. No
-    // presigning (no GetSignedUrl/PresignedUrl command) and no public-URL
-    // access anywhere in the request path.
     expect(fake.calls).toEqual([
       "PutObjectCommand",
       "GetObjectCommand",

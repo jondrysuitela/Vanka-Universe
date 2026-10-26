@@ -177,6 +177,22 @@ export async function selectAnyMediaObject(
   return rows[0] ?? null;
 }
 
+/** An owned media row of either status; used by upload finalization. */
+export async function selectOwnedMediaObject(
+  pool: MediaQueryable,
+  id: string,
+  ownerId: string,
+): Promise<MediaObjectRow | null> {
+  const rows = await guarded<MediaObjectRow>(
+    pool,
+    `SELECT ${RETURN_COLUMNS}
+       FROM media_objects
+      WHERE id = $1 AND owner_id = $2`,
+    [id, ownerId],
+  );
+  return rows[0] ?? null;
+}
+
 /** A READY row by id, or null. Pending rows are intentionally invisible. */
 export async function selectReadyMediaObject(
   pool: MediaQueryable,

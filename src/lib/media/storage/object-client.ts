@@ -3,12 +3,14 @@ import "server-only";
 import { Buffer } from "node:buffer";
 
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { readR2Config, type R2Config, type S3ClientLike } from "@/lib/media/storage/r2";
 
@@ -19,12 +21,24 @@ import { readR2Config, type R2Config, type S3ClientLike } from "@/lib/media/stor
  * Unlike `r2.ts` (which owns both objects AND a JSON metadata index), this
  * client deals ONLY with raw bytes. Metadata lives in Postgres.
  *
- * No public access, no presigned URLs, and keys are never returned to clients;
- * the caller always supplies a server-derived key.
+ * No objects are public and keys are never returned to clients. The only
+ * browser capability is a short-lived, server-generated presigned PUT URL for
+ * an isolated staging key.
  */
 
 export interface MediaObjectClient {
   put(key: string, bytes: Buffer, contentType: string): Promise<void>;
+  copy(sourceKey: string, destinationKey: string, contentType: string, sourceEtag: string): Promise<void>;
+  presignPut(
+    key: string,
+    contentType: string,
+    contentLength: number,
+    expiresInSeconds: number,
+  ): Promise<string>;
+  /** Returns object metadata and the first 16 bytes, or null when missing. */
+  inspect(
+    key: string,
+  ): Promise<{ size: number; contentType: string | null; etag: string; prefix: Buffer } | null>;
   /** Resolves to null when the object does not exist. */
   get(key: string): Promise<Buffer | null>;
   /** Cheap existence probe (no body download); false when the object is absent. */
@@ -58,11 +72,12 @@ async function bodyToBuffer(body: unknown): Promise<Buffer | null> {
   return null;
 }
 
-function createS3Client(config: R2Config): S3Client {
+function createS3Client(config: R2Config, forPresignedUpload = false): S3Client {
   return new S3Client({
     region: "auto",
     endpoint: config.endpoint,
     forcePathStyle: true,
+    ...(forPresignedUpload ? { requestChecksumCalculation: "WHEN_REQUIRED" as const } : {}),
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
@@ -73,6 +88,12 @@ function createS3Client(config: R2Config): S3Client {
 interface ObjectClientOptions {
   client?: S3ClientLike;
   config?: R2Config;
+  presignPut?: (
+    key: string,
+    contentType: string,
+    contentLength: number,
+    expiresInSeconds: number,
+  ) => Promise<string>;
 }
 
 /**
@@ -82,6 +103,24 @@ interface ObjectClientOptions {
 export function createR2ObjectClient(options: ObjectClientOptions = {}): MediaObjectClient {
   const config = options.config ?? readR2Config();
   const client: S3ClientLike = options.client ?? createS3Client(config);
+  const presignPut =
+    options.presignPut ??
+    (async (key: string, contentType: string, contentLength: number, expiresInSeconds: number) => {
+      if (!(client instanceof S3Client)) {
+        throw new Error("Presigned uploads require a configured S3 client.");
+      }
+      const presignClient = createS3Client(config, true);
+      return getSignedUrl(
+        presignClient,
+        new PutObjectCommand({
+          Bucket: config.bucket,
+          Key: key,
+          ContentType: contentType,
+          ContentLength: contentLength,
+        }),
+        { expiresIn: expiresInSeconds },
+      );
+    });
 
   return {
     async put(key, bytes, contentType) {
@@ -93,6 +132,60 @@ export function createR2ObjectClient(options: ObjectClientOptions = {}): MediaOb
           ContentType: contentType,
         }),
       );
+    },
+    async copy(sourceKey, destinationKey, contentType, sourceEtag) {
+      const copySource = `${config.bucket}/${sourceKey
+        .split("/")
+        .map((part) => encodeURIComponent(part))
+        .join("/")}`;
+      await client.send(
+        new CopyObjectCommand({
+          Bucket: config.bucket,
+          Key: destinationKey,
+          CopySource: copySource,
+          CopySourceIfMatch: sourceEtag,
+          MetadataDirective: "REPLACE",
+          ContentType: contentType,
+        }),
+      );
+    },
+    async presignPut(key, contentType, contentLength, expiresInSeconds) {
+      return presignPut(key, contentType, contentLength, expiresInSeconds);
+    },
+    async inspect(key) {
+      let head: { ContentLength?: number; ContentType?: string; ETag?: string };
+      try {
+        head = (await client.send(
+          new HeadObjectCommand({ Bucket: config.bucket, Key: key }),
+        )) as typeof head;
+      } catch (error) {
+        if (isNotFound(error)) return null;
+        throw error;
+      }
+      if (
+        typeof head.ContentLength !== "number" ||
+        !Number.isFinite(head.ContentLength) ||
+        typeof head.ETag !== "string" ||
+        head.ETag === ""
+      ) {
+        throw new Error("R2 returned incomplete object metadata.");
+      }
+      const response = (await client.send(
+        new GetObjectCommand({
+          Bucket: config.bucket,
+          Key: key,
+          Range: "bytes=0-15",
+          IfMatch: head.ETag,
+        }),
+      )) as { Body?: unknown };
+      const prefix = await bodyToBuffer(response.Body);
+      if (!prefix) throw new Error("R2 returned an empty object prefix.");
+      return {
+        size: head.ContentLength,
+        contentType: head.ContentType ?? null,
+        etag: head.ETag,
+        prefix,
+      };
     },
     async get(key) {
       try {

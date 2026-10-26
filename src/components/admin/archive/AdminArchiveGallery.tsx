@@ -117,6 +117,25 @@ interface SelectedUpload {
   uploadUrl?: string;
 }
 
+interface DirectUploadPlanResponse {
+  id: string;
+  url: string;
+  headers: Record<string, string>;
+}
+
+function isDirectUploadPlan(value: unknown): value is DirectUploadPlanResponse {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const plan = value as Record<string, unknown>;
+  return (
+    typeof plan.id === "string" &&
+    typeof plan.url === "string" &&
+    typeof plan.headers === "object" &&
+    plan.headers !== null &&
+    !Array.isArray(plan.headers) &&
+    Object.values(plan.headers).every((header) => typeof header === "string")
+  );
+}
+
 export default function AdminArchiveGallery() {
   const { showToast } = useToast();
 
@@ -260,29 +279,78 @@ export default function AdminArchiveGallery() {
         return;
       }
 
-      const form = new FormData();
-      form.append("file", shrunk.file, shrunk.file.name);
-      // Pool tag: Arsip Ibu. Keeps this file out of the birthday gallery.
-      form.append("collection", "archive");
-      const res = await fetch("/api/media", {
+      const initResponse = await fetch("/api/media/direct-upload", {
         method: "POST",
-        headers: { "x-vanka-request": "1" },
-        body: form,
+        headers: {
+          "Content-Type": "application/json",
+          "x-vanka-request": "1",
+        },
+        body: JSON.stringify({
+          action: "create",
+          name: shrunk.file.name,
+          mime: shrunk.file.type,
+          size: shrunk.file.size,
+        }),
       });
-      const body = (await res.json().catch(() => null)) as
+      const initBody = (await initResponse.json().catch(() => null)) as
         | { data?: unknown; error?: { message?: string } }
         | null;
-      if (!res.ok || !body?.data) {
-        const responseType = res.headers.get("content-type");
+      if (!initResponse.ok || !initBody?.data) {
+        const responseType = initResponse.headers.get("content-type");
         const responseInfo = [
-          `HTTP ${res.status}`,
+          `HTTP ${initResponse.status}`,
           responseType ? `respons ${responseType.split(";")[0]}` : null,
         ]
           .filter(Boolean)
           .join(" · ");
         setUploadError(
-          body?.error?.message ??
-            `Server gagal menerima file (${responseInfo}). Coba lagi; bila berulang, kirim kode HTTP ini untuk diperiksa.`,
+          initBody?.error?.message ??
+            `Server gagal menyiapkan unggahan (${responseInfo}). Coba lagi; bila berulang, kirim kode HTTP ini untuk diperiksa.`,
+        );
+        return;
+      }
+      if (!isDirectUploadPlan(initBody.data)) {
+        setUploadError("Server mengirim instruksi unggah yang tidak valid.");
+        return;
+      }
+
+      const objectResponse = await fetch(initBody.data.url, {
+        method: "PUT",
+        headers: initBody.data.headers,
+        body: shrunk.file,
+      });
+      if (!objectResponse.ok) {
+        const responseType = objectResponse.headers.get("content-type");
+        setUploadError(
+          `Gagal mengunggah ke penyimpanan (HTTP ${objectResponse.status}${
+            responseType ? ` · respons ${responseType.split(";")[0]}` : ""
+          }). Coba lagi; bila berulang, kirim kode HTTP ini untuk diperiksa.`,
+        );
+        return;
+      }
+
+      const completeResponse = await fetch("/api/media/direct-upload", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-vanka-request": "1",
+        },
+        body: JSON.stringify({ action: "complete", id: initBody.data.id }),
+      });
+      const completeBody = (await completeResponse.json().catch(() => null)) as
+        | { data?: unknown; error?: { message?: string } }
+        | null;
+      if (!completeResponse.ok || !completeBody?.data) {
+        const responseType = completeResponse.headers.get("content-type");
+        const responseInfo = [
+          `HTTP ${completeResponse.status}`,
+          responseType ? `respons ${responseType.split(";")[0]}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        setUploadError(
+          completeBody?.error?.message ??
+            `Server gagal memverifikasi unggahan (${responseInfo}). Coba lagi; bila berulang, kirim kode HTTP ini untuk diperiksa.`,
         );
         return;
       }
@@ -297,7 +365,7 @@ export default function AdminArchiveGallery() {
       });
       await refreshMedia();
     } catch {
-      setUploadError("Tidak dapat menghubungi server.");
+      setUploadError("Koneksi ke server atau R2 gagal. Periksa koneksi dan CORS bucket R2.");
     } finally {
       setUploading(false);
     }

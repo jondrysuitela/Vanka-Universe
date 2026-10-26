@@ -6,6 +6,8 @@ import {
   MediaObjectsUnavailableError,
 } from "@/lib/media/db/errors";
 
+vi.mock("server-only", () => ({}));
+
 vi.mock("@/lib/db", () => ({
   getPool: () => (globalThis as { __testPool?: unknown }).__testPool,
 }));
@@ -21,6 +23,8 @@ vi.mock("@/lib/media/store", () => ({
   findMediaRecord: vi.fn(),
   updateMediaMetadata: vi.fn(),
   deleteMedia: vi.fn(),
+  createDirectMediaUpload: vi.fn(),
+  completeDirectMediaUpload: vi.fn(),
 }));
 
 vi.mock("@/lib/media/references", () => ({
@@ -31,6 +35,7 @@ vi.mock("@/lib/media/references", () => ({
 }));
 
 import { GET as listGet, POST as listPost } from "@/app/api/media/route";
+import { POST as directUploadPost } from "@/app/api/media/direct-upload/route";
 import {
   DELETE as detailDelete,
   GET as detailGet,
@@ -41,6 +46,8 @@ import { checkMediaReferences } from "@/lib/media/references";
 import {
   MAX_REQUEST_BYTES,
   deleteMedia,
+  createDirectMediaUpload,
+  completeDirectMediaUpload,
   findMediaRecord,
   listMedia,
   readMediaFile,
@@ -492,6 +499,75 @@ describe("media role policy (4G.20)", () => {
       expect(res.status, role).toBe(201);
     }
     expect(vi.mocked(saveMediaUpload)).toHaveBeenCalledTimes(2);
+  });
+
+  it("direct archive upload: creates an authorized presigned plan", async () => {
+    setupSession(fake, true);
+    vi.mocked(createDirectMediaUpload).mockResolvedValue({
+      id: VALID_UUID,
+      url: "https://r2.example/signed",
+      headers: { "Content-Type": "video/mp4" },
+    });
+    const res = await directUploadPost(
+      new Request(`${BASE}/api/media/direct-upload`, {
+        method: "POST",
+        headers: mutationHeaders(COOKIE),
+        body: JSON.stringify({
+          action: "create",
+          name: "memory.mp4",
+          mime: "video/mp4",
+          size: 1024,
+        }),
+      }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(vi.mocked(createDirectMediaUpload)).toHaveBeenCalledWith(
+      expect.objectContaining({ id: ADMIN_ID }),
+      {
+        name: "memory.mp4",
+        mime: "video/mp4",
+        size: 1024,
+        collection: "archive",
+      },
+    );
+  });
+
+  it("direct archive upload: rejects editors before touching storage", async () => {
+    setupSession(fake, true, "editor");
+    const res = await directUploadPost(
+      new Request(`${BASE}/api/media/direct-upload`, {
+        method: "POST",
+        headers: mutationHeaders(COOKIE),
+        body: JSON.stringify({
+          action: "create",
+          name: "memory.mp4",
+          mime: "video/mp4",
+          size: 1024,
+        }),
+      }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(vi.mocked(createDirectMediaUpload)).not.toHaveBeenCalled();
+  });
+
+  it("direct archive upload: completes only a valid upload ID", async () => {
+    setupSession(fake, true);
+    vi.mocked(completeDirectMediaUpload).mockResolvedValue(mediaRecord({ collection: "archive" }) as never);
+    const res = await directUploadPost(
+      new Request(`${BASE}/api/media/direct-upload`, {
+        method: "POST",
+        headers: mutationHeaders(COOKIE),
+        body: JSON.stringify({ action: "complete", id: VALID_UUID }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(completeDirectMediaUpload)).toHaveBeenCalledWith(
+      expect.objectContaining({ id: ADMIN_ID }),
+      VALID_UUID,
+    );
   });
 
   it("PATCH metadata: editor denied 403 before the body is even parsed (role in body cannot escalate)", async () => {

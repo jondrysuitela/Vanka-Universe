@@ -112,12 +112,43 @@ Preview). Never commit a real value.
 |---|---|---|
 | `DB_DRIVER` | `neon` | yes |
 | `DATABASE_URL` | Neon pooled connection string (`sslmode=require`) | yes |
-| `MEDIA_STORAGE_DRIVER` | `db-r2` (recommended) or `r2` | yes for media |
+| `MEDIA_STORAGE_DRIVER` | `db-r2` (required for direct archive uploads) | yes for media |
 | `APP_ORIGIN` | `https://<domain>.vercel.app` | strongly recommended |
 | `ARCHIVE_TRUSTED_PROXY_HEADER` | the ONE header your proxy overwrites with the client IP | see §5 |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2 | when `r2`/`db-r2` |
 | `R2_KEY_PREFIX` | e.g. `media/` — **not empty** | when `r2`/`db-r2` |
 | `BCRYPT_COST` | default 12 | optional |
+
+### R2 browser-upload CORS
+
+Private archive media uploads use a short-lived presigned `PUT` URL when
+`MEDIA_STORAGE_DRIVER=db-r2`, so the file bytes do not pass through a Vercel
+Function (whose request-body limit is 4.5 MB). Configure the R2 bucket CORS
+policy to allow the exact production/preview app origins that need uploads:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://<your-app-domain>"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Do not use `*` for origins. Add each trusted Vercel preview origin explicitly
+if preview deployments need this flow. The signed URL only writes to a
+temporary server-generated key; the app verifies its size, MIME metadata, and
+magic bytes before copying it to the final private key and listing its record.
+Other providers fail closed for this direct-upload route.
+
+Add an R2 lifecycle rule to expire objects under
+`<R2_KEY_PREFIX>pending/` after one day. Abandoned uploads remain in this
+staging prefix; the opt-in media reconciliation skips their pending metadata
+while staged bytes exist and can remove the row after the lifecycle rule
+expires those bytes.
 
 ---
 
@@ -159,8 +190,9 @@ for `/admin`.
    file yang terunggah bisa hilang. **Setel `MEDIA_STORAGE_DRIVER` secara
    eksplisit** di dashboard Vercel.
 2. **Penyimpanan media di Vercel.** Untuk produksi multi-instance gunakan
-   `db-r2` (metadata di Postgres + byte di R2) atau `r2` (R2 + index JSON).
-   Driver `filesystem` hanya untuk pengembangan lokal.
+   `db-r2` (metadata di Postgres + byte di R2). Upload Arsip Privat langsung
+   dari browser hanya tersedia pada driver ini; provider lain akan menolak
+   endpoint tersebut tanpa fallback. Driver `filesystem` hanya untuk lokal.
 3. **`R2_KEY_PREFIX` kosong default ke `test/`**, sehingga objek produksi masuk
    ke prefix `test/`. Setel eksplisit untuk produksi.
 4. **PIN arsip privat butuh IP klien yang tepercaya.** Tanpa

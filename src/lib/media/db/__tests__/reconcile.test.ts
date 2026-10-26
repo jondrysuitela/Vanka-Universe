@@ -48,6 +48,9 @@ function createObjects(presentKeys: string[]) {
 
   const objects: MediaObjectClient = {
     put: async () => {},
+    copy: async () => {},
+    presignPut: async () => "https://r2.example/upload",
+    inspect: async () => null,
     get: async () => null,
     exists: async (key) => {
       existsCalls.push(key);
@@ -125,6 +128,28 @@ describe("reconcilePendingMediaObjects", () => {
     const byId = Object.fromEntries(report.findings.map((f) => [f.id, f.action]));
     expect(byId[ID_OLD]).toBe("mark-ready");
     expect(byId[ID_OLD2]).toBe("delete-row");
+  });
+
+  it("preserves a pending row while its direct-upload staging object exists", async () => {
+    rows = [rowFor(ID_OLD, OLD)];
+    const { objects, existsCalls } = createObjects([`test/pending/${ID_OLD}.png`]);
+
+    const report = await reconcilePendingMediaObjects({
+      pool: fake.pool,
+      objects,
+      now: NOW,
+      dryRun: false,
+    });
+
+    expect(report.skipped).toBe(1);
+    expect(report.findings[0]).toMatchObject({
+      id: ID_OLD,
+      action: "skip",
+      reason: "direct-upload-staging-present",
+    });
+    expect(existsCalls).toEqual([`test/${ID_OLD}.png`, `test/pending/${ID_OLD}.png`]);
+    expect(rows).toHaveLength(1);
+    expect(writes).toEqual([]);
   });
 
   it("skips young rows without probing the object", async () => {

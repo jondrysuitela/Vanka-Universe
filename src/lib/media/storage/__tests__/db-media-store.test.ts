@@ -115,6 +115,13 @@ function createMemoryPool() {
         return { rows: (r && r.status === "ready" ? [{ ...r }] : []) as T[] };
       }
 
+      if (sql.includes("owner_id = $2")) {
+        const r = rows.get(String(params[0]));
+        return {
+          rows: (r && r.owner_id === String(params[1]) ? [{ ...r }] : []) as T[],
+        };
+      }
+
       if (sql.includes("WHERE id = $1")) {
         const r = rows.get(String(params[0]));
         return { rows: (r ? [{ ...r }] : []) as T[] };
@@ -150,6 +157,30 @@ function createMemoryObjects() {
       if (injected) throw injected;
       map.set(key, Buffer.from(bytes));
     },
+    async copy(sourceKey, destinationKey, _contentType, sourceEtag) {
+      expect(sourceEtag).toBe('"tag"');
+      const bytes = map.get(sourceKey);
+      if (!bytes) throw new Error("source object is missing");
+      map.set(destinationKey, Buffer.from(bytes));
+    },
+    async presignPut(key, contentType, contentLength, expiresInSeconds) {
+      expect(key).toMatch(/^test\/pending\//);
+      expect(contentType).toBe("image/png");
+      expect(contentLength).toBeGreaterThan(0);
+      expect(expiresInSeconds).toBe(600);
+      return "https://r2.example/upload";
+    },
+    async inspect(key) {
+      const bytes = map.get(key);
+      return bytes
+        ? {
+            size: bytes.byteLength,
+            contentType: "image/png",
+            etag: '"tag"',
+            prefix: bytes.subarray(0, 16),
+          }
+        : null;
+    },
     async get(key) {
       return map.has(key) ? Buffer.from(map.get(key)!) : null;
     },
@@ -183,6 +214,60 @@ function makeStore() {
 }
 
 describe("createDbMediaStore — upload lifecycle", () => {
+  it("finalizes a verified staged archive upload into its stable media key", async () => {
+    const { db, obj, store } = makeStore();
+    const plan = await store.createDirectUpload(admin, {
+      name: "foto.png",
+      mime: "image/png",
+      size: PNG.byteLength,
+      collection: "archive",
+    });
+    const stagingKey = `test/pending/${plan.id}.png`;
+    obj.map.set(stagingKey, Buffer.from(PNG));
+
+    const record = await store.completeDirectUpload(admin, plan.id);
+
+    expect(record.id).toBe(plan.id);
+    expect(record.collection).toBe("archive");
+    expect(db.rows.get(plan.id)?.status).toBe("ready");
+    expect(obj.map.has(`test/${plan.id}.png`)).toBe(true);
+    expect(obj.map.has(stagingKey)).toBe(false);
+  });
+
+  it("rejects finalization when the uploaded bytes do not match the reserved size", async () => {
+    const { db, obj, store } = makeStore();
+    const plan = await store.createDirectUpload(admin, {
+      name: "foto.png",
+      mime: "image/png",
+      size: PNG.byteLength,
+      collection: "archive",
+    });
+    const stagingKey = `test/pending/${plan.id}.png`;
+    obj.map.set(stagingKey, Buffer.from([...PNG, 0x00]));
+
+    await expect(store.completeDirectUpload(admin, plan.id)).rejects.toMatchObject({
+      code: "UPLOAD_SIZE_MISMATCH",
+    });
+    expect(db.rows.has(plan.id)).toBe(false);
+    expect(obj.map.has(stagingKey)).toBe(false);
+  });
+
+  it("does not allow another admin to finalize an owned pending upload", async () => {
+    const { db, obj, store } = makeStore();
+    const plan = await store.createDirectUpload(admin, {
+      name: "foto.png",
+      mime: "image/png",
+      size: PNG.byteLength,
+      collection: "archive",
+    });
+
+    await expect(
+      store.completeDirectUpload({ ...admin, id: "other-admin" }, plan.id),
+    ).rejects.toMatchObject({ code: "UPLOAD_NOT_FOUND" });
+    expect(db.rows.get(plan.id)?.status).toBe("pending");
+    expect(obj.map.size).toBe(0);
+  });
+
   it("writes pending, uploads the object, then flips to ready", async () => {
     const { db, obj, store } = makeStore();
     const record = await store.save(admin, pngFile());

@@ -11,6 +11,7 @@ import {
   listMediaObjectsByStatus,
   markMediaObjectReady,
   reinsertMediaObjectRow,
+  selectOwnedMediaObject,
   rowToRecord,
   selectReadyMediaObject,
   updateReadyMediaObjectMetadata,
@@ -64,7 +65,27 @@ export interface DbMediaStoreOptions {
   storageProvider?: string;
 }
 
-export function createDbMediaStore(options: DbMediaStoreOptions): MediaStore {
+export interface DirectUploadInput {
+  name: string;
+  mime: string;
+  size: number;
+  collection: "archive";
+}
+
+export interface DirectUploadPlan {
+  id: string;
+  url: string;
+  headers: Record<string, string>;
+}
+
+export interface DirectUploadMediaStore extends MediaStore {
+  createDirectUpload(admin: SessionAdmin, input: DirectUploadInput): Promise<DirectUploadPlan>;
+  completeDirectUpload(admin: SessionAdmin, id: string): Promise<MediaRecord>;
+}
+
+const DIRECT_UPLOAD_URL_TTL_SECONDS = 10 * 60;
+
+export function createDbMediaStore(options: DbMediaStoreOptions): DirectUploadMediaStore {
   const { pool, objects } = options;
   const keyPrefix = options.keyPrefix ?? DEFAULT_DB_TEST_PREFIX;
   const storageProvider = options.storageProvider ?? "r2";
@@ -154,6 +175,110 @@ export function createDbMediaStore(options: DbMediaStoreOptions): MediaStore {
     // markReady returned null: the row vanished. Tear everything down.
     await compensateFailedSave(id, key);
     throw new MediaMetadataIntegrityError("Baris metadata hilang saat menandai siap.");
+  }
+
+  async function createDirectUpload(
+    admin: SessionAdmin,
+    input: DirectUploadInput,
+  ): Promise<DirectUploadPlan> {
+    if (input.collection !== "archive") {
+      throw new ApiError(422, "INVALID_COLLECTION", "Unggahan langsung hanya untuk Arsip Privat.");
+    }
+    const meta = MIME_MAP[input.mime];
+    if (!meta || meta.kind === "audio") {
+      throw new ApiError(415, "UNSUPPORTED_TYPE", "Tipe media tidak didukung.");
+    }
+    if (
+      !Number.isInteger(input.size) ||
+      input.size <= 0 ||
+      input.size > maxBytesForKind(meta.kind)
+    ) {
+      throw new ApiError(413, "FILE_TOO_LARGE", "Ukuran media melebihi batas.");
+    }
+
+    const id = randomUUID();
+    const extension = extensionForMime(input.mime);
+    if (!extension) throw new MediaMetadataIntegrityError("Unsupported MIME type for direct upload.");
+    const storageKey = objectKeyFor(id, input.mime);
+    const stagingKey = `${keyPrefix}pending/${id}.${extension}`;
+    const displayName = input.name.trim().slice(0, 255) || `${id}.${extension}`;
+
+    await insertPendingMediaObject(pool, {
+      id,
+      storageProvider,
+      storageKey,
+      mime: input.mime,
+      kind: meta.kind,
+      size: input.size,
+      displayName,
+      ownerId: admin.id,
+      ownerLabel: admin.name,
+      collection: input.collection,
+    });
+
+    try {
+      const url = await objects.presignPut(
+        stagingKey,
+        input.mime,
+        input.size,
+        DIRECT_UPLOAD_URL_TTL_SECONDS,
+      );
+      return { id, url, headers: { "Content-Type": input.mime } };
+    } catch (error) {
+      await deleteMediaObjectRow(pool, id);
+      throw error;
+    }
+  }
+
+  async function completeDirectUpload(admin: SessionAdmin, id: string): Promise<MediaRecord> {
+    const row = await selectOwnedMediaObject(pool, id, admin.id);
+    if (!row || row.collection !== "archive" || row.storage_provider !== storageProvider) {
+      throw new ApiError(404, "UPLOAD_NOT_FOUND", "Unggahan tidak ditemukan.");
+    }
+    if (row.status === "ready") return rowToRecord(row);
+
+    const extension = extensionForMime(row.mime_type);
+    const meta = MIME_MAP[row.mime_type];
+    if (!extension || !meta || meta.kind === "audio" || meta.kind !== row.kind) {
+      throw new MediaMetadataIntegrityError("Pending upload metadata is invalid.");
+    }
+
+    const stagingKey = `${keyPrefix}pending/${id}.${extension}`;
+    const uploaded = await objects.inspect(stagingKey);
+    if (!uploaded) {
+      throw new ApiError(409, "UPLOAD_NOT_RECEIVED", "File belum selesai diunggah ke penyimpanan.");
+    }
+    if (uploaded.size !== Number(row.file_size)) {
+      await objects.delete(stagingKey);
+      await deleteMediaObjectRow(pool, id);
+      throw new ApiError(422, "UPLOAD_SIZE_MISMATCH", "Ukuran file yang diterima tidak sesuai.");
+    }
+    if (
+      uploaded.size > maxBytesForKind(row.kind) ||
+      uploaded.contentType !== row.mime_type ||
+      sniffMime(uploaded.prefix) !== row.mime_type
+    ) {
+      await objects.delete(stagingKey);
+      await deleteMediaObjectRow(pool, id);
+      throw new ApiError(415, "UPLOAD_CONTENT_MISMATCH", "Isi file tidak cocok dengan tipe yang dipilih.");
+    }
+
+    await objects.copy(stagingKey, row.storage_key, row.mime_type, uploaded.etag);
+    const ready = await markMediaObjectReady(pool, id);
+    if (!ready) {
+      await objects.delete(row.storage_key);
+      throw new MediaMetadataIntegrityError("Pending media row disappeared during direct upload.");
+    }
+
+    try {
+      await objects.delete(stagingKey);
+    } catch {
+      console.error("direct media upload staging cleanup failed", {
+        name: "DirectUploadCleanupError",
+        kind: "cleanup",
+      });
+    }
+    return rowToRecord(ready);
   }
 
   /**
@@ -263,5 +388,15 @@ export function createDbMediaStore(options: DbMediaStoreOptions): MediaStore {
     return rowToRecord(row);
   }
 
-  return { list, save, read, find, replaceImage, updateMetadata, remove };
+  return {
+    list,
+    save,
+    read,
+    find,
+    replaceImage,
+    updateMetadata,
+    remove,
+    createDirectUpload,
+    completeDirectUpload,
+  };
 }

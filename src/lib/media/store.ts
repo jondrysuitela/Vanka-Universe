@@ -3,11 +3,18 @@ import "server-only";
 import type { SessionAdmin } from "@/lib/auth/session";
 import { getMediaStore } from "@/lib/media/storage";
 import type {
+  DirectUploadInput,
+  DirectUploadMediaStore,
+  DirectUploadPlan,
+} from "@/lib/media/storage/db-media-store";
+import type {
   MediaCollection,
   MediaMetadataPatch,
   MediaRecord,
   MediaUploadMetadata,
+  MediaStore,
 } from "@/lib/media/storage/types";
+import { StorageConfigError as StorageConfigErrorClass } from "@/lib/media/storage/types";
 
 /**
  * Media store facade (Tahap 4G.40C).
@@ -34,6 +41,39 @@ export async function saveMediaUpload(
   metadata?: MediaUploadMetadata,
 ): Promise<MediaRecord> {
   return getMediaStore().save(admin, file, collection, metadata);
+}
+
+function isDirectUploadStore(store: MediaStore): store is DirectUploadMediaStore {
+  return (
+    "createDirectUpload" in store &&
+    typeof store.createDirectUpload === "function" &&
+    "completeDirectUpload" in store &&
+    typeof store.completeDirectUpload === "function"
+  );
+}
+
+function getDirectUploadStore(): DirectUploadMediaStore {
+  const store = getMediaStore();
+  if (!isDirectUploadStore(store)) {
+    throw new StorageConfigErrorClass(
+      "Unggahan langsung ke R2 memerlukan MEDIA_STORAGE_DRIVER=db-r2.",
+    );
+  }
+  return store;
+}
+
+export async function createDirectMediaUpload(
+  admin: SessionAdmin,
+  input: DirectUploadInput,
+): Promise<DirectUploadPlan> {
+  return getDirectUploadStore().createDirectUpload(admin, input);
+}
+
+export async function completeDirectMediaUpload(
+  admin: SessionAdmin,
+  id: string,
+): Promise<MediaRecord> {
+  return getDirectUploadStore().completeDirectUpload(admin, id);
 }
 
 export async function readMediaFile(
