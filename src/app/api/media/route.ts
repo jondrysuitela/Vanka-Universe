@@ -69,8 +69,14 @@ function parseCollection(raw: string | null): MediaCollection {
 function assertSafeUpload(request: Request): void {
   const origin = request.headers.get("origin");
   const url = new URL(request.url);
-  const expectedOrigin = process.env.APP_ORIGIN ?? url.origin;
-  if (!origin || origin !== expectedOrigin) {
+  const trustedOrigins = (
+    process.env.APP_ORIGINS ?? process.env.APP_ORIGIN ?? url.origin
+  )
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (!origin || !trustedOrigins.includes(origin)) {
     throw new ApiError(403, "ORIGIN_REJECTED", "Origin tidak diizinkan.");
   }
 
