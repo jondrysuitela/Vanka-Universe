@@ -96,6 +96,55 @@ function photoMotionIndex(id: string): number {
   return hash >>> 0;
 }
 
+const SCRAPBOOK_FRAMES = [
+  {
+    id: "tape-top",
+    src: "/scrapbook/frame-tape-top.png",
+    aperture: { left: "14.3%", top: "15.6%", width: "67.7%", height: "57.5%" },
+  },
+  {
+    id: "tape-corner",
+    src: "/scrapbook/frame-tape-corner.png",
+    aperture: { left: "15.9%", top: "16.1%", width: "66%", height: "57.2%" },
+  },
+  {
+    id: "polaroid",
+    src: "/scrapbook/frame-polaroid.png",
+    aperture: { left: "10.4%", top: "12.3%", width: "78.1%", height: "62.6%" },
+  },
+] as const;
+
+const SCRAPBOOK_CARD_POSITIONS = {
+  active: { left: "21%", top: "4%", scale: 1, rotate: 0, zIndex: 100, opacity: 1, blur: 0 },
+  next: { left: "49%", top: "15%", scale: 0.7, rotate: 9, zIndex: 72, opacity: 0.88, blur: 1 },
+  previous: { left: "-1%", top: "18%", scale: 0.68, rotate: -10, zIndex: 70, opacity: 0.84, blur: 1 },
+  nextTwo: { left: "10%", top: "35%", scale: 0.66, rotate: 6, zIndex: 52, opacity: 0.78, blur: 1.5 },
+  previousTwo: { left: "44%", top: "32%", scale: 0.64, rotate: -7, zIndex: 50, opacity: 0.74, blur: 1.5 },
+} as const;
+
+function scrapbookCardPosition(offset: number) {
+  if (offset === 0) return SCRAPBOOK_CARD_POSITIONS.active;
+  if (offset === 1) return SCRAPBOOK_CARD_POSITIONS.next;
+  if (offset === -1) return SCRAPBOOK_CARD_POSITIONS.previous;
+  if (offset === 2) return SCRAPBOOK_CARD_POSITIONS.nextTwo;
+  if (offset === -2) return SCRAPBOOK_CARD_POSITIONS.previousTwo;
+
+  const depth = Math.abs(offset);
+  const stackDepth = depth - 3;
+  const side = Math.sign(offset);
+  const horizontalJitter = ((stackDepth % 5) - 2) * 1.5 + side * 2;
+
+  return {
+    left: `${20 + horizontalJitter}%`,
+    top: `${12 + Math.min(stackDepth, 6) * 1.2 + side}%`,
+    scale: Math.max(0.5, 0.62 - stackDepth * 0.004),
+    rotate: (stackDepth % 7) - 3,
+    zIndex: 40 - depth,
+    opacity: Math.max(0.28, 0.66 - stackDepth * 0.025),
+    blur: Math.min(3, 1.8 + stackDepth * 0.08),
+  };
+}
+
 /** Deterministic, lightweight star field (no randomness on first paint). */
 function Stars({ count = 26 }: { count?: number }) {
   const stars = useMemo(
@@ -207,11 +256,11 @@ function FrameMedia({
       <div className="cosmos-aurora-c absolute -right-1/4 bottom-0 h-[70%] w-[70%]" />
       <div className="cosmos-vignette absolute inset-0" />
       <Stars count={16} />
-      <div className="relative z-10 flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
-        <span className="text-shadow font-script text-3xl text-[#f0d9a4]">
+      <div className="relative z-10 flex h-full flex-col items-center justify-center gap-2 px-3 text-center">
+        <span className="text-shadow font-script text-[clamp(0.8rem,2.8vw,1.5rem)] leading-tight text-[#f0d9a4]">
           “a frame for our little light”
         </span>
-        <p className="font-serif text-sm leading-relaxed text-white/70">
+        <p className="max-w-[24rem] font-serif text-[clamp(0.55rem,1.4vw,0.8rem)] leading-snug text-white/70">
           A place for Vanka&apos;s first-year photos and videos. This frame stays honest until a real
           memory fills it.
         </p>
@@ -329,7 +378,11 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
   const reduce = useReducedMotion();
 
   const list = items.length > 0 ? items : [PLACEHOLDER_ITEM];
-  const item = list[index % list.length];
+  const visibleCards = list.map((item, itemIndex) => {
+    const wrappedOffset = (itemIndex - index + list.length) % list.length;
+    const offset = wrappedOffset > list.length / 2 ? wrappedOffset - list.length : wrappedOffset;
+    return { item, itemIndex, offset };
+  });
   const goPrev = () => {
     setDirection(-1);
     setIndex((i) => (i - 1 + list.length) % list.length);
@@ -344,172 +397,91 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
     setIndex(nextIndex);
   };
 
-  const frameVariants = {
-    initial: { opacity: 0 },
-    animate: { opacity: 1 },
-    exit: { opacity: 0 },
-  };
-
   return (
     <div className="flex w-full max-w-5xl flex-col items-center gap-4">
       <div
         data-testid="memory-scrapbook-stage"
         className="relative grid aspect-[4/5] w-full max-w-2xl place-items-center overflow-visible bg-transparent"
-        style={{ perspective: 1400 }}
+        style={{ perspective: 1400, isolation: "isolate" }}
       >
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-          <span className="absolute left-[2%] top-[4%] h-[18%] w-[35%] rotate-[-9deg] bg-[#3a2b2b]/80 blur-[1px]" />
-          <span className="absolute right-[1%] top-[36%] h-[15%] w-[31%] rotate-[8deg] bg-[#c49c61]/30 blur-[2px]" />
-          <span className="absolute bottom-[6%] left-[12%] h-[13%] w-[38%] rotate-[5deg] bg-[#342627]/75 blur-[1px]" />
-          <span className="absolute right-[8%] top-[5%] h-8 w-20 rotate-[12deg] border-x border-white/20 bg-[#e9d8a9]/75 shadow-md sm:h-10 sm:w-28" />
-          <span className="absolute bottom-[18%] right-[8%] h-7 w-16 rotate-[-8deg] border-x border-white/20 bg-[#e9d8a9]/70 shadow-md sm:h-9 sm:w-24" />
-          <span className="absolute left-[12%] top-[43%] h-2 w-20 -rotate-[18deg] rounded-sm bg-[#f2e8d1]/75 shadow sm:w-28" />
-        </div>
+        <AnimatePresence initial={false} custom={direction}>
+          {visibleCards.map(({ item, itemIndex, offset }) => {
+            const position = scrapbookCardPosition(offset);
+            const frame = SCRAPBOOK_FRAMES[itemIndex % SCRAPBOOK_FRAMES.length];
+            const motionIndex = photoMotionIndex(item.id);
+            const isActive = offset === 0;
 
-        {list.length > 1 && (
-          <AnimatePresence initial={false} custom={direction}>
-            {[-1, 1, 2].map((offset) => {
-              const cardIndex = (index + offset + list.length) % list.length;
-              const card = list[cardIndex];
-              const isImage = card.kind === "image" && card.id !== PLACEHOLDER_ITEM.id;
-              const placement =
-                offset === -1
-                  ? "left-[2%] top-[12%] rotate-[-12deg]"
-                  : offset === 1
-                    ? "right-[2%] top-[10%] rotate-[10deg]"
-                    : "bottom-[9%] left-[4%] rotate-[7deg]";
-
-              return (
-                <motion.div
-                  key={`album-card-${offset}-${card.id}`}
-                  custom={direction}
-                  initial={
-                    reduce
-                      ? { opacity: 0 }
-                      : { opacity: 0, x: offset * 60, y: 24, rotate: offset * 18 }
-                  }
-                  animate={
-                    reduce
-                      ? { opacity: 0.82 }
-                      : {
-                          opacity: 0.82,
-                          x: 0,
-                          y: 0,
-                          rotate: offset < 0 ? -9 : 8,
-                        }
-                  }
-                  exit={
-                    reduce
-                      ? { opacity: 0 }
-                      : {
-                          opacity: 0,
-                          x: direction * -90,
-                          y: 30,
-                          rotate: offset * 18,
-                        }
-                  }
-                  transition={{
-                    duration: reduce ? 0 : GALLERY_TRANSITION_S,
-                    type: "spring",
-                    stiffness: 90,
-                    damping: 18,
-                    mass: 1.15,
-                  }}
-                  aria-hidden="true"
-                  data-testid="memory-scrapbook-print"
-                  className={`absolute z-10 aspect-[3/4] w-[30%] overflow-hidden border-[5px] border-[#f2eadb] bg-[#f2eadb] p-1 shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[7px] sm:p-1.5 ${placement}`}
-                >
-                  {isImage && (
-                    <Image
-                      src={getMediaUrl(card.id)}
-                      alt=""
-                      fill
-                      sizes="(max-width: 768px) 30vw, 25vw"
-                      className="object-contain"
-                      unoptimized
-                    />
-                  )}
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        )}
-
-        {/*
-          The selected print keeps its paper frame. The large outer backplate
-          is intentionally absent so the scrapbook sits directly in the scene.
-        */}
-        <div className="z-20 grid h-full w-full place-items-center">
-          <AnimatePresence initial={false} custom={direction}>
-            <motion.div
-              key={`${item.id}-${index}`}
-              custom={direction}
-              variants={frameVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: "easeInOut" }}
-              data-testid="memory-scrapbook-photo"
-              className="relative col-start-1 row-start-1 aspect-[4/5] w-[62%] max-w-none border-[8px] border-[#f2eadb] bg-[#f2eadb] p-1.5 shadow-[0_28px_75px_-22px_rgba(0,0,0,0.9)] sm:border-[12px] sm:p-2"
-              style={{ transformPerspective: 1400, transformStyle: "preserve-3d" }}
-            >
-              <GalleryFrame
-                item={item}
-                getMediaUrl={getMediaUrl}
-                imageFit="contain"
-                unframed
-                kenBurns={item.kind === "image" && !reduce}
-                motionIndex={photoMotionIndex(item.id)}
-                zoomRange={0.1 + ((photoMotionIndex(item.id) >>> 4) % 6) * 0.01}
-                className="aspect-[4/5] w-full bg-[#17130f]"
-                footer={
-                  <figcaption className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 pb-4 pt-12 text-left sm:px-5">
-                    <p className="font-script text-lg text-[#fff3d9] sm:text-2xl">{itemCaption(item)}</p>
-                    <p className="mt-0.5 font-sans text-[0.65rem] uppercase tracking-[0.25em] text-white/65">
-                      {index + 1} / {list.length}
-                    </p>
-                  </figcaption>
-                }
-              />
-              {!reduce && (
-                <motion.span
-                  key={`warm-wash-${index}`}
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 z-10"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: [0, 0.55, 0] }}
-                  transition={{ duration: 1.15, ease: "easeOut" }}
-                  style={{
-                    background:
-                      "radial-gradient(ellipse at 50% 42%, rgba(255,244,216,0.8), rgba(255,222,157,0.22) 48%, transparent 78%)",
-                    mixBlendMode: "screen",
-                  }}
-                />
-              )}
-              <motion.span
-                aria-hidden="true"
-                className="pointer-events-none absolute -top-2 left-1/2 z-30 h-7 w-20 -translate-x-1/2 rotate-[-3deg] border-x border-white/20 bg-[#e9d8a9]/80 shadow-sm sm:-top-3 sm:h-9 sm:w-28"
+            return (
+              <motion.div
+                key={item.id}
+                custom={direction}
                 initial={false}
-                animate={reduce ? { opacity: 0 } : { opacity: [0, 0.95, 0.72], y: [8, 0, 0] }}
-                transition={{ duration: reduce ? 0 : 0.65, ease: "easeOut" }}
-              />
-              {!reduce && (
-                <motion.span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 z-10"
+                animate={{
+                  left: position.left,
+                  top: position.top,
+                  scale: position.scale,
+                  rotate: position.rotate,
+                  opacity: position.opacity,
+                  filter: `blur(${position.blur}px) drop-shadow(0 24px 28px rgba(0,0,0,0.5))`,
+                }}
+                exit={{ opacity: 0, x: direction * -120, rotate: position.rotate + direction * 12 }}
+                transition={{
+                  duration: reduce ? 0 : GALLERY_TRANSITION_S,
+                  ease: [0.65, 0, 0.35, 1],
+                }}
+                data-testid={isActive ? "memory-scrapbook-photo" : "memory-scrapbook-print"}
+                data-gallery-slot={offset}
+                data-gallery-item-id={item.id}
+                data-gallery-depth={Math.abs(offset)}
+                data-blur-px={position.blur}
+                data-transition-duration-ms={reduce ? 0 : GALLERY_TRANSITION_S * 1000}
+                className="absolute top-0 aspect-[1200/1447] w-[58%] origin-center"
+                style={{ zIndex: position.zIndex, transformPerspective: 1400 }}
+              >
+                <div
+                  data-testid="memory-scrapbook-photo-window"
+                  className="absolute overflow-hidden bg-[#17130f]"
                   style={{
-                    background:
-                      "linear-gradient(108deg, transparent 32%, rgba(246,215,122,0.18) 43%, rgba(255,248,220,0.62) 50%, rgba(246,215,122,0.18) 57%, transparent 68%)",
-                    mixBlendMode: "screen",
+                    left: frame.aperture.left,
+                    top: frame.aperture.top,
+                    width: frame.aperture.width,
+                    height: frame.aperture.height,
                   }}
-                  initial={{ x: "-140%", opacity: 0 }}
-                  animate={{ x: "140%", opacity: [0, 0.85, 0] }}
-                  transition={{ duration: 1.25, delay: 0.12, ease: "easeInOut" }}
+                >
+                  <GalleryFrame
+                    item={item}
+                    getMediaUrl={getMediaUrl}
+                    imageFit="cover"
+                    unframed
+                    kenBurns={item.kind === "image" && item.id !== PLACEHOLDER_ITEM.id && !reduce}
+                    motionIndex={motionIndex}
+                    zoomRange={0.1 + ((motionIndex >>> 4) % 6) * 0.01}
+                    className="h-full w-full"
+                  />
+                </div>
+                <Image
+                  src={frame.src}
+                  alt=""
+                  fill
+                  sizes="(max-width: 768px) 58vw, 420px"
+                  className="pointer-events-none z-10 object-fill"
+                  data-testid="scrapbook-frame-art"
+                  data-frame-asset={frame.id}
                 />
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
+                {item.id !== PLACEHOLDER_ITEM.id && (
+                  <div className="pointer-events-none absolute inset-x-[10%] bottom-[4%] z-20 flex h-[17%] flex-col justify-center overflow-hidden text-[#514232]">
+                    <p className="line-clamp-2 font-script text-[clamp(0.55rem,1.7vw,1.2rem)] leading-tight">
+                      {itemCaption(item)}
+                    </p>
+                    <p className="mt-0.5 font-sans text-[clamp(0.35rem,0.8vw,0.55rem)] uppercase tracking-[0.2em] opacity-70">
+                      {list.findIndex((photo) => photo.id === item.id) + 1} / {list.length}
+                    </p>
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
       </div>
 
       <div className="flex w-full max-w-2xl items-center justify-between gap-3">
