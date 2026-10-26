@@ -193,6 +193,8 @@ describe("landing page — on the birthday itself", () => {
     });
     expect(screen.getByRole("heading", { name: "Jam dua belas tepat!" })).toBeTruthy();
     expect(screen.getByTestId("birthday-ambient-celebration")).toBeTruthy();
+    expect(screen.getAllByTestId("birthday-gold-glitter")).toHaveLength(42);
+    expect(screen.queryByTestId("birthday-confetti")).toBeNull();
     await act(async () => {
       for (let flush = 0; flush < 10; flush += 1) await Promise.resolve();
     });

@@ -840,13 +840,13 @@ export default function ExperienceScene({
       </div>
 
       {/* controls + indicator */}
-      <div className="mt-10 flex w-full max-w-md items-center justify-between gap-4">
+      <div className="mt-10 flex w-full max-w-md items-center justify-between gap-2 sm:gap-4">
         <button
           type="button"
           onClick={onPrev}
           disabled={active === 0}
           aria-label="Previous scene"
-          className="rounded-full border border-white/20 px-5 py-2.5 font-sans text-xs font-semibold uppercase tracking-[0.2em] text-white/70 transition duration-300 hover:border-[#e9c67c] hover:text-[#f6e3b2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c] disabled:cursor-not-allowed disabled:opacity-35"
+          className="rounded-full border border-white/20 px-3 py-2.5 font-sans text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-white/70 transition duration-300 hover:border-[#e9c67c] hover:text-[#f6e3b2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c] disabled:cursor-not-allowed disabled:opacity-35 sm:px-5 sm:text-xs sm:tracking-[0.2em]"
         >
           ← Previous
         </button>
@@ -871,7 +871,7 @@ export default function ExperienceScene({
           onClick={onNext}
           disabled={active === SCENE_COUNT - 1}
           aria-label="Next scene"
-          className="rounded-full border border-white/20 px-5 py-2.5 font-sans text-xs font-semibold uppercase tracking-[0.2em] text-white/70 transition duration-300 hover:border-[#e9c67c] hover:text-[#f6e3b2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c] disabled:cursor-not-allowed disabled:opacity-35"
+          className="rounded-full border border-white/20 px-3 py-2.5 font-sans text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-white/70 transition duration-300 hover:border-[#e9c67c] hover:text-[#f6e3b2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c] disabled:cursor-not-allowed disabled:opacity-35 sm:px-5 sm:text-xs sm:tracking-[0.2em]"
         >
           Next →
         </button>

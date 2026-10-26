@@ -10,7 +10,7 @@ const FIREWORKS = [
   { x: 28, y: 72, delay: 6.8, color: "#b6f5cd" },
 ] as const;
 
-const COLORS = ["#f6d77a", "#f3a6d2", "#a9c8ff", "#b6f5cd", "#fdf3d8"] as const;
+const COLORS = ["#f6d77a", "#e9c67c", "#fff0c4"] as const;
 
 export default function BirthdayAmbientEffects() {
   const reduce = useReducedMotion();
@@ -92,28 +92,37 @@ export default function BirthdayAmbientEffects() {
           }}
         />
       ))}
-      {Array.from({ length: 30 }, (_, index) => (
-        <motion.span
-          key={`confetti-${index}`}
-          className="absolute top-0 h-3 w-1.5 rounded-sm"
-          style={{
-            left: `${(index * 47 + 9) % 100}%`,
-            backgroundColor: COLORS[index % COLORS.length],
-          }}
-          animate={{
-            y: ["-5vh", "105vh"],
-            x: [0, index % 2 === 0 ? 18 : -18, 0],
-            rotate: [0, 180, 360],
-            opacity: [0, 0.8, 0.6, 0],
-          }}
-          transition={{
-            duration: 7 + (index % 6),
-            delay: (index % 10) * 0.65,
-            repeat: Infinity,
-            ease: "linear",
-          }}
-        />
-      ))}
+      {Array.from({ length: 42 }, (_, index) => {
+        const size = index % 7 === 0 ? 3 : index % 3 === 0 ? 2 : 1;
+        const color = COLORS[index % COLORS.length];
+        return (
+          <motion.span
+            key={`gold-glitter-${index}`}
+            data-testid="birthday-gold-glitter"
+            className="absolute rounded-full"
+            style={{
+              left: `${(index * 47 + 9) % 100}%`,
+              top: `${(index * 67 + 11) % 100}%`,
+              width: size,
+              height: size,
+              backgroundColor: color,
+              boxShadow: `0 0 ${size * 5}px ${color}`,
+            }}
+            animate={{
+              y: [0, index % 2 === 0 ? -18 : 18, 0],
+              x: [0, index % 2 === 0 ? 5 : -5, 0],
+              scale: [0.45, 1.5, 0.6],
+              opacity: [0.12, 0.95, 0.2],
+            }}
+            transition={{
+              duration: 2.4 + (index % 5) * 0.55,
+              delay: (index % 9) * 0.3,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
