@@ -273,7 +273,17 @@ export default function AdminArchiveGallery() {
         | { data?: unknown; error?: { message?: string } }
         | null;
       if (!res.ok || !body?.data) {
-        setUploadError(body?.error?.message ?? "Gagal menyimpan file ke server.");
+        const responseType = res.headers.get("content-type");
+        const responseInfo = [
+          `HTTP ${res.status}`,
+          responseType ? `respons ${responseType.split(";")[0]}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        setUploadError(
+          body?.error?.message ??
+            `Server gagal menerima file (${responseInfo}). Coba lagi; bila berulang, kirim kode HTTP ini untuk diperiksa.`,
+        );
         return;
       }
       clearUploadSelection();
