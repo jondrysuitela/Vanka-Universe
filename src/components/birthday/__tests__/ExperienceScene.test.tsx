@@ -102,6 +102,7 @@ describe("ExperienceScene memory gallery", () => {
     });
 
     expect(screen.getByText("Foto pertama")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Foto atau video berikutnya" })).toBeNull();
     expect(screen.getByTestId("birthday-ambient-celebration")).toBeTruthy();
     expect(screen.getByTestId("memory-scrapbook-stage").className).toContain("aspect-[4/5]");
     expect(screen.getByTestId("memory-scrapbook-stage").className).toContain("max-w-2xl");
@@ -138,7 +139,7 @@ describe("ExperienceScene memory gallery", () => {
     });
     expect(screen.getByText("Foto pertama")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Foto atau video berikutnya" }));
+    fireEvent.click(screen.getByRole("button", { name: "Foto berikutnya: Foto pertama" }));
     expect(screen.getByText("Foto kedua")).toBeTruthy();
     const activeCard = screen.getByTestId("memory-scrapbook-photo");
     expect(activeCard.getAttribute("data-gallery-slot")).toBe("0");

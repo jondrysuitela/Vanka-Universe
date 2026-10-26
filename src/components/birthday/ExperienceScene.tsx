@@ -458,6 +458,16 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                     zoomRange={0.1 + ((motionIndex >>> 4) % 6) * 0.01}
                     className="h-full w-full"
                   />
+                  {isActive && item.kind === "image" && (
+                    <button
+                      type="button"
+                      onClick={goNext}
+                      disabled={list.length <= 1}
+                      aria-label={`Foto berikutnya: ${itemCaption(item)}`}
+                      title="Klik foto untuk melihat foto berikutnya"
+                      className="absolute inset-0 z-20 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#f6e3b2] disabled:cursor-default"
+                    />
+                  )}
                 </div>
                 <Image
                   src={frame.src}
@@ -531,15 +541,6 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
           ))}
         </div>
 
-        <button
-          type="button"
-          onClick={goNext}
-          disabled={list.length <= 1}
-          aria-label="Foto atau video berikutnya"
-          className="rounded-full border border-white/20 px-4 py-2 font-sans text-xs uppercase tracking-[0.18em] text-white/70 transition duration-300 hover:border-[#e9c67c] hover:text-[#f6e3b2] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c] disabled:opacity-35"
-        >
-          Next →
-        </button>
       </div>
     </div>
   );
