@@ -35,7 +35,7 @@ export default function AdminSidebar() {
       <aside
         className={`${
           open ? "flex" : "hidden"
-        } md:flex md:w-72 flex-col border-r border-white/10 bg-[#050814]/95 backdrop-blur-xl md:h-screen md:sticky md:top-0`}
+        } md:flex md:w-72 md:shrink-0 flex-col border-r border-white/10 bg-[#050814]/95 backdrop-blur-xl md:h-screen md:sticky md:top-0`}
       >
         <div className="px-6 py-5 border-b border-white/10">
           <Link href="/" className="text-lg font-display tracking-widest text-[#fdf3d8]">
