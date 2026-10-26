@@ -3,7 +3,9 @@
 **Status: PREPARED, NOT EXECUTED.** No migration has been run against Neon.
 
 Target object: `public.private_archive_media` (draft
-`db/draft_migration_4g39_archive_gallery.sql`).
+`db/draft_migration_4g39_archive_gallery.sql`). The additive
+`db/draft_migration_4g39v_archive_gallery_videos.sql` allows gallery videos
+when 4g39 was already applied with the original photo-only role constraint.
 
 ## 0. Preconditions (verified 4G.39D-preflight, read-only)
 - Neon `neondb` / schema `public`, `DB_DRIVER=neon`.
@@ -27,13 +29,23 @@ aborts (⇒ full rollback) if prerequisites are missing.
 transaction and **cannot** run this file. Use psql over TCP or the Neon SQL
 Editor (SQL editor runs the selected text as one transaction).
 
+If `private_archive_media` is absent, first apply 4g39:
+
 ```bash
 # Do NOT echo the connection string to any log.
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/draft_migration_4g39_archive_gallery.sql
 ```
 
+Then apply 4g39v to allow gallery videos (also safe if the current 4g39 draft
+already created the expanded role constraint):
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/draft_migration_4g39v_archive_gallery_videos.sql
+```
+
 Neon SQL Editor: paste the entire file and run once (the file's `BEGIN/COMMIT`
-keeps it atomic).
+keeps it atomic). Apply the 4g39v file as well; it is safe after either
+version of 4g39.
 
 ## 1.1 Verify structure (catalog must prove it — do not assume)
 ```sql
@@ -49,7 +61,7 @@ select column_name, data_type, is_nullable
 select conname, pg_get_constraintdef(oid)
   from pg_constraint where conrelid='public.private_archive_media'::regclass
  order by conname;
--- expect: pk, uq(archive_id,media_id), chk role intro|photo,
+-- expect: pk, uq(archive_id,media_id), chk role intro|photo|video,
 --         chk position>=0, fk archive_id -> private_archives ON DELETE CASCADE
 
 select indexname from pg_indexes
@@ -140,7 +152,7 @@ With the migration applied and the server running:
 ## 7. Cleanup
 - The script restores the baseline gallery automatically.
 - Manual reset (only if you created the test gallery): `PUT /api/archive/gallery`
-  with `{ "introMediaId": null, "photos": [] }` — removes gallery rows only.
+  with `{ "introMediaId": null, "photos": [], "videos": [] }` — removes gallery rows only.
 - Never delete media files that are referenced; with the new probe registered,
   DELETE of referenced media returns `409 CONFLICT`.
 

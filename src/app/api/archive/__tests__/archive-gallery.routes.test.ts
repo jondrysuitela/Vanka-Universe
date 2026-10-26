@@ -22,6 +22,7 @@ const EDITOR_ID = "admin-editor";
 
 const IMG_A = "11111111-1111-4111-8111-111111111111";
 const VID = "33333333-3333-4333-8333-333333333333";
+const VIDEO_A = "44444444-4444-4444-8444-444444444444";
 
 type Fake = ReturnType<typeof createFakePool>;
 
@@ -89,6 +90,7 @@ function body(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     introMediaId: VID,
     photos: [{ mediaId: IMG_A, title: "A", description: "Cerita", memoryDate: null }],
+    videos: [],
     ...overrides,
   });
 }
@@ -231,23 +233,41 @@ describe("PUT /api/archive/gallery", () => {
     expect(putCalls(fake)).toHaveLength(0);
   });
 
-  it("saves the gallery when media are valid", async () => {
+  it("rejects a non-video gallery item (422 GALLERY_VIDEO_NOT_VIDEO)", async () => {
     setupDb(fake, { admin: adminRow("owner") });
     h.records.set(VID, { kind: "video" });
     h.records.set(IMG_A, { kind: "image" });
+    h.records.set(VIDEO_A, { kind: "image" });
     const res = await galleryPut(
       new Request(`${BASE}/api/archive/gallery`, {
         method: "PUT",
         headers: mutationHeaders(sessionCookie("owner")),
-        body: body(),
+        body: body({ videos: [{ mediaId: VIDEO_A, title: "", description: "" }] }),
+      }),
+    );
+    expect(res.status).toBe(422);
+    expect((await json(res)).error).toMatchObject({ code: "GALLERY_VIDEO_NOT_VIDEO" });
+    expect(putCalls(fake)).toHaveLength(0);
+  });
+
+  it("saves the gallery when media are valid", async () => {
+    setupDb(fake, { admin: adminRow("owner") });
+    h.records.set(VID, { kind: "video" });
+    h.records.set(IMG_A, { kind: "image" });
+    h.records.set(VIDEO_A, { kind: "video" });
+    const res = await galleryPut(
+      new Request(`${BASE}/api/archive/gallery`, {
+        method: "PUT",
+        headers: mutationHeaders(sessionCookie("owner")),
+        body: body({ videos: [{ mediaId: VIDEO_A, title: "Video", description: "Kenangan" }] }),
       }),
     );
     expect(res.status).toBe(200);
     const calls = putCalls(fake);
     expect(calls).toHaveLength(1);
     const params = calls[0][1] as unknown[];
-    expect(params[2]).toEqual([VID, IMG_A]);
-    expect(params[3]).toEqual(["intro", "photo"]);
+    expect(params[2]).toEqual([VID, IMG_A, VIDEO_A]);
+    expect(params[3]).toEqual(["intro", "photo", "video"]);
   });
 
   it("returns 503 when the gallery table is not migrated", async () => {

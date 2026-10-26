@@ -17,7 +17,6 @@ export const ARCHIVE_VISITOR_MESSAGES = {
   notReady: "Arsip belum siap ditampilkan. Data privat tidak dibuka.",
   loadError: "Arsip tidak dapat dimuat saat ini.",
   empty: "Belum ada kenangan yang tersimpan di arsip ini.",
-  musicUnavailable: "Musik latar belum tersedia karena penyimpanan audio belum didukung.",
   introFailed: "Video pembuka tidak dapat dimuat. Anda tetap dapat melihat galeri.",
 } as const;
 
@@ -92,12 +91,15 @@ export interface VisitorExperiencePhoto {
   position: number;
 }
 
+export type VisitorExperienceVideo = VisitorExperiencePhoto;
+
 export interface VisitorExperienceData {
   title: string;
   narrative: string;
   musicEnabled: boolean;
   introMediaId: string | null;
   photos: VisitorExperiencePhoto[];
+  videos: VisitorExperienceVideo[];
 }
 
 function readString(value: unknown): string {
@@ -105,7 +107,7 @@ function readString(value: unknown): string {
 }
 
 /**
- * Validate the experience payload without trusting it. Malformed photo entries
+ * Validate the experience payload without trusting it. Malformed gallery items
  * are dropped; unknown extra fields are ignored. Returns null only when the
  * envelope itself is not an object.
  */
@@ -114,22 +116,28 @@ export function parseVisitorExperience(value: unknown): VisitorExperienceData | 
   const raw = value as Record<string, unknown>;
 
   const photosInput = Array.isArray(raw.photos) ? raw.photos : [];
+  const videosInput = Array.isArray(raw.videos) ? raw.videos : [];
   const photos: VisitorExperiencePhoto[] = [];
-  for (const item of photosInput) {
-    if (typeof item !== "object" || item === null) continue;
-    const photo = item as Record<string, unknown>;
-    if (typeof photo.mediaId !== "string" || photo.mediaId.length === 0) continue;
-    photos.push({
-      mediaId: photo.mediaId,
-      title: readString(photo.title),
-      description: readString(photo.description),
-      memoryDate:
-        typeof photo.memoryDate === "string" && photo.memoryDate.length > 0
-          ? photo.memoryDate
-          : null,
-      position: typeof photo.position === "number" ? photo.position : photos.length,
-    });
-  }
+  const videos: VisitorExperienceVideo[] = [];
+  const parseItems = (input: unknown[], target: VisitorExperiencePhoto[]) => {
+    for (const item of input) {
+      if (typeof item !== "object" || item === null) continue;
+      const photo = item as Record<string, unknown>;
+      if (typeof photo.mediaId !== "string" || photo.mediaId.length === 0) continue;
+      target.push({
+        mediaId: photo.mediaId,
+        title: readString(photo.title),
+        description: readString(photo.description),
+        memoryDate:
+          typeof photo.memoryDate === "string" && photo.memoryDate.length > 0
+            ? photo.memoryDate
+            : null,
+        position: typeof photo.position === "number" ? photo.position : target.length,
+      });
+    }
+  };
+  parseItems(photosInput, photos);
+  parseItems(videosInput, videos);
 
   return {
     title: readString(raw.title),
@@ -140,6 +148,7 @@ export function parseVisitorExperience(value: unknown): VisitorExperienceData | 
         ? raw.introMediaId
         : null,
     photos,
+    videos,
   };
 }
 

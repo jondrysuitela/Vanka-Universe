@@ -27,7 +27,8 @@
 --   * Satu tabel `private_archive_media` menyimpan DUA peran:
 --       role='intro' = SATU video pembuka arsip (maks. satu per arsip, dijaga
 --                      partial UNIQUE INDEX);
---       role='photo' = galeri foto, urut lewat kolom `position`.
+--      role='photo' = foto galeri, role='video' = video galeri; masing-masing
+--                      diurutkan lewat kolom `position`.
 --   * `media_id` = UUID dari MEDIA FILESYSTEM (`storage/media/index.json`,
 --     dibuat `randomUUID()` oleh src/lib/media/store.ts). TIDAK ada FK ke
 --     `public.media`: tabel itu belum dipakai runtime (0 baris) dan tidak
@@ -137,7 +138,7 @@ CREATE TABLE IF NOT EXISTS private_archive_media (
   -- Id media FILESYSTEM (storage/media/index.json). SENGAJA bukan FK ke
   -- `media` (tabel itu belum dipakai runtime). Divalidasi di aplikasi.
   media_id     UUID NOT NULL,
-  -- 'intro' = satu video pembuka; 'photo' = item galeri.
+  -- 'intro' = video pembuka; 'photo'/'video' = item galeri.
   role         VARCHAR(20) NOT NULL DEFAULT 'photo',
   -- Metadata PER-FOTO (tidak ada deskripsi global).
   title        VARCHAR(255) NOT NULL DEFAULT '',
@@ -147,14 +148,14 @@ CREATE TABLE IF NOT EXISTS private_archive_media (
   position     INTEGER NOT NULL DEFAULT 0,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT chk_private_archive_media_role CHECK (role IN ('intro','photo')),
+  CONSTRAINT chk_private_archive_media_role CHECK (role IN ('intro','photo','video')),
   CONSTRAINT chk_private_archive_media_position CHECK (position >= 0),
   -- Satu media hanya boleh muncul sekali per arsip.
   CONSTRAINT uq_private_archive_media_media UNIQUE (archive_id, media_id)
 );
 
 COMMENT ON TABLE private_archive_media IS
-  'Galeri arsip privat "Tentang Ibumu": satu video pembuka (role=intro) + foto berurutan (role=photo). Referensi via media_id, bukan URL/path.';
+  'Galeri arsip privat "Tentang Ibumu": video pembuka + foto/video berurutan. Referensi via media_id, bukan URL/path.';
 COMMENT ON COLUMN private_archive_media.media_id IS
   'Id media filesystem (storage/media). Divalidasi di aplikasi (harus image/video sesuai role); bukan FK ke media (tabel media belum dipakai runtime).';
 COMMENT ON COLUMN private_archive_media.memory_date IS

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  MAX_GALLERY_PHOTOS,
+  MAX_GALLERY_ITEMS,
   saveGallerySchema,
 } from "@/lib/archive/gallery-schema";
 
@@ -29,11 +29,13 @@ describe("saveGallerySchema", () => {
     const parsed = saveGallerySchema.safeParse({
       introMediaId: VID,
       photos: [photo(IMG_A), photo(IMG_B)],
+      videos: [],
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.introMediaId).toBe(VID);
       expect(parsed.data.photos.map((p) => p.mediaId)).toEqual([IMG_A, IMG_B]);
+      expect(parsed.data.videos).toEqual([]);
     }
   });
 
@@ -47,6 +49,31 @@ describe("saveGallerySchema", () => {
       expect(parsed.data.photos[0].memoryDate).toBeNull();
       expect(parsed.data.introMediaId).toBeNull();
     }
+  });
+
+  it("accepts video gallery items and rejects duplicate media across item types", () => {
+    const valid = saveGallerySchema.safeParse({
+      introMediaId: VID,
+      photos: [photo(IMG_A)],
+      videos: [photo(IMG_B)],
+    });
+    expect(valid.success).toBe(true);
+
+    const duplicate = saveGallerySchema.safeParse({
+      introMediaId: null,
+      photos: [photo(IMG_A)],
+      videos: [photo(IMG_A)],
+    });
+    expect(duplicate.success).toBe(false);
+  });
+
+  it("rejects reusing the intro video as a video gallery item", () => {
+    const parsed = saveGallerySchema.safeParse({
+      introMediaId: VID,
+      photos: [],
+      videos: [photo(VID)],
+    });
+    expect(parsed.success).toBe(false);
   });
 
   it("rejects an unknown key (a raw src/path cannot be smuggled in)", () => {
@@ -94,7 +121,16 @@ describe("saveGallerySchema", () => {
     // Duplicates alone would fail; use distinct ids to isolate the cap check.
     const distinct = photos.map((p, i) => ({ ...p, mediaId: uuidLike(i) }));
     const parsed = saveGallerySchema.safeParse({ introMediaId: null, photos: distinct });
-    expect(MAX_GALLERY_PHOTOS).toBe(200);
+    expect(MAX_GALLERY_ITEMS).toBe(200);
+    expect(parsed.success).toBe(false);
+  });
+
+  it("caps the combined photo and video gallery at 200 items", () => {
+    const parsed = saveGallerySchema.safeParse({
+      introMediaId: null,
+      photos: Array.from({ length: 150 }, (_, i) => photo(uuidLike(i))),
+      videos: Array.from({ length: 51 }, (_, i) => photo(uuidLike(i + 150))),
+    });
     expect(parsed.success).toBe(false);
   });
 });

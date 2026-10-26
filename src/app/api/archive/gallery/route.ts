@@ -16,7 +16,7 @@ import {
 import { findMediaRecord } from "@/lib/media/store";
 
 /**
- * GET /api/archive/gallery — intro video + ordered photos of the private archive.
+ * GET /api/archive/gallery — intro video + ordered private archive media.
  * PUT /api/archive/gallery — atomically replace the whole gallery.
  *
  * Both require a valid admin session AND an operator role (owner/admin). The
@@ -24,9 +24,8 @@ import { findMediaRecord } from "@/lib/media/store";
  * and the gallery references media ONLY by validated media id (never a URL/path —
  * `strictObject` rejects unknown keys such as `src`).
  *
- * Server-side media validation is authoritative: the intro must be a stored
- * `video` and every photo a stored `image`. An unknown/incompatible media id is
- * rejected (422) before anything is written.
+ * Server-side media validation is authoritative: the intro/gallery videos must
+ * be stored videos and gallery photos must be stored images.
  *
  * FAIL-CLOSED: until the draft migration `4g39` is applied the gallery table does
  * not exist; reads/writes return 503 GALLERY_NOT_MIGRATED rather than a silent
@@ -72,7 +71,7 @@ export async function PUT(request: Request): Promise<Response> {
       return jsonError(422, "VALIDATION_ERROR", "Input tidak valid.", parsed.error.flatten());
     }
 
-    const { introMediaId, photos } = parsed.data;
+    const { introMediaId, photos, videos } = parsed.data;
 
     if (introMediaId !== null) {
       const intro = await findMediaRecord(introMediaId);
@@ -95,6 +94,18 @@ export async function PUT(request: Request): Promise<Response> {
       }
       if (record.kind !== "image") {
         return jsonError(422, "PHOTO_NOT_IMAGE", "Item galeri harus berupa foto.");
+      }
+    }
+
+    for (const video of videos) {
+      const record = await findMediaRecord(video.mediaId);
+      if (!record) {
+        return jsonError(422, "MEDIA_NOT_FOUND", "Media video tidak ditemukan.", {
+          mediaId: video.mediaId,
+        });
+      }
+      if (record.kind !== "video") {
+        return jsonError(422, "GALLERY_VIDEO_NOT_VIDEO", "Item video galeri harus berupa video.");
       }
     }
 

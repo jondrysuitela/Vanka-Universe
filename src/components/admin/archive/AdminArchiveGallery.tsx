@@ -9,6 +9,7 @@ import { compressForUpload, describeSavings } from "@/lib/media/compress";
 import ScrapbookImageCropper from "@/components/admin/media/ScrapbookImageCropper";
 import {
   EMPTY_GALLERY_STATE,
+  addVideo,
   addPhoto,
   fromServerGallery,
   galleryLoadNote,
@@ -18,10 +19,13 @@ import {
   loadGallery,
   loadMediaFiles,
   movePhoto,
+  moveVideo,
   removePhoto,
+  removeVideo,
   setIntro,
   splitMedia,
   updatePhoto,
+  updateVideo,
   saveGallery,
   type GalleryState,
   type MediaFile,
@@ -38,8 +42,8 @@ import {
  *   reach the server only through the explicit "Simpan ke Server" button.
  * - A 503 (draft migration not applied) is shown as "not activated", never as an
  *   empty saved gallery. Failed saves keep the in-memory edits intact.
- * - Removing a photo removes it from the GALLERY only; the source media file is
- *   never deleted here.
+ * - Removing a gallery item removes only its reference; the source media file
+ *   is never deleted here.
  */
 
 type LoadState =
@@ -275,10 +279,10 @@ export default function AdminArchiveGallery() {
       clearUploadSelection();
       const savings = describeSavings(shrunk);
       showToast({
-        title: "Tersimpan",
+        title: "File tersimpan",
         message: savings
-          ? `File tersimpan di pool Arsip Ibu (dikompres ${savings}).`
-          : "File tersimpan di pool Arsip Ibu (tidak masuk galeri ulang tahun).",
+          ? `File tersimpan di server (dikompres ${savings}). Tambahkan ke susunan galeri lalu simpan galeri untuk menampilkannya.`
+          : "File tersimpan di server. Tambahkan ke susunan galeri lalu simpan galeri untuk menampilkannya.",
         type: "success",
       });
       await refreshMedia();
@@ -303,12 +307,21 @@ export default function AdminArchiveGallery() {
     setGallery(result.state);
   }
 
+  function handleAddVideo(media: MediaFile) {
+    const result = addVideo(gallery, media.id);
+    if (!result.ok) {
+      showToast({ title: "Sudah dipakai", message: "Media ini sudah ada di arsip.", type: "info" });
+      return;
+    }
+    setGallery(result.state);
+  }
+
   function handleSetIntro(mediaId: string | null) {
     const result = setIntro(gallery, mediaId);
     if (!result.ok) {
       showToast({
         title: "Tidak bisa",
-        message: "Media ini sudah dipakai sebagai foto galeri.",
+        message: "Media ini sudah dipakai sebagai video pembuka atau item galeri.",
         type: "info",
       });
       return;
@@ -318,7 +331,7 @@ export default function AdminArchiveGallery() {
 
   function confirmRemove() {
     if (pendingRemove) {
-      setGallery(removePhoto(gallery, pendingRemove));
+      setGallery(removeVideo(removePhoto(gallery, pendingRemove), pendingRemove));
       setPendingRemove(null);
     }
   }
@@ -347,8 +360,8 @@ export default function AdminArchiveGallery() {
         <div>
           <h2 className="text-xl font-display tracking-wider text-[#fdf3d8]">Galeri Arsip Ibu</h2>
           <p className="text-sm text-[#fdf3d8]/70 mt-1">
-            Video pembuka + galeri foto Polaroid. Referensi media privat (bukan URL). Perubahan
-            hanya tersimpan setelah menekan “Simpan ke Server”.
+            Video pembuka, video kenangan, dan foto. Berkas yang diunggah langsung tersimpan di
+            server; susunan galeri tersimpan setelah menekan “Simpan ke Server”.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -495,7 +508,7 @@ export default function AdminArchiveGallery() {
                 <p className="pt-1 font-medium text-[#a8e6cf]">
                   {uploadSelected.uploadFile
                     ? "Hasil crop 4:5 siap diupload. Foto asli di perangkat tidak diubah."
-                    : "Pratinjau sementara — akan disimpan ke pool Arsip Ibu"}
+                    : "File siap diunggah ke server dan masuk ke Pustaka Arsip Privat."}
                 </p>
               </div>
 
@@ -629,6 +642,47 @@ export default function AdminArchiveGallery() {
         )}
       </section>
 
+      {/* ---------------------------------------------------- video picker */}
+      <section className="rounded-2xl border border-white/10 bg-[#0b1226]/70 backdrop-blur-xl p-6 space-y-4">
+        <h3 className="font-display text-lg text-[#fdf3d8]">Tambah Video Kenangan</h3>
+        {videos.length === 0 ? (
+          <p className="text-sm text-[#fdf3d8]/70">
+            Belum ada video di server. Unggah video MP4 untuk menambahkannya ke galeri.
+          </p>
+        ) : (
+          <ul className="grid gap-4 sm:grid-cols-2">
+            {videos.map((video) => {
+              const used = isMediaUsed(gallery, video.id);
+              return (
+                <li key={video.id} className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                  <video
+                    src={`/api/media/${video.id}`}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    aria-label={`Pratinjau ${video.name}`}
+                    className="aspect-video w-full bg-black object-contain"
+                  />
+                  <div className="flex items-center justify-between gap-3 p-3">
+                    <span className="min-w-0 truncate text-sm text-[#fdf3d8]/85" title={video.name}>
+                      {video.name}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={used}
+                      onClick={() => handleAddVideo(video)}
+                      className="shrink-0 rounded-lg border border-[#f6d77a]/40 px-3 py-1.5 text-xs text-[#f6d77a] hover:bg-[#f6d77a]/10 disabled:opacity-45"
+                    >
+                      {used ? "Sudah dipakai" : "Tambah ke galeri"}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       {/* ---------------------------------------------------- photo picker */}
       <section className="rounded-2xl border border-white/10 bg-[#0b1226]/70 backdrop-blur-xl p-6 space-y-4">
         <h3 className="font-display text-lg text-[#fdf3d8]">Tambah Foto ke Galeri</h3>
@@ -684,20 +738,76 @@ export default function AdminArchiveGallery() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-display text-lg text-[#fdf3d8]">
-            Galeri Polaroid ({gallery.photos.length})
+            Galeri Video ({gallery.videos.length}) · Foto ({gallery.photos.length})
           </h3>
-          {gallery.photos.length > 0 && (
+          {gallery.videos.length > 0 && (
             <p className="text-xs text-[#fdf3d8]/60">
-              Urutan tersimpan: {gallery.photos.map((p, i) => `${i + 1}`).join(" · ")}
+              Urutan video: {gallery.videos.map((_, i) => `${i + 1}`).join(" · ")}
             </p>
           )}
         </div>
 
-        {gallery.photos.length === 0 ? (
+        {gallery.videos.length === 0 && gallery.photos.length === 0 ? (
           <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#fdf3d8]/70">
-            Belum ada foto di galeri.
+            Belum ada video atau foto di galeri.
           </p>
         ) : (
+          <>
+          {gallery.videos.length > 0 && (
+            <ol className="grid gap-5 sm:grid-cols-2">
+              {gallery.videos.map((video, index) => {
+                const media = mediaState.files.find((file) => file.id === video.mediaId);
+                return (
+                  <li key={video.mediaId} className="overflow-hidden rounded-xl border border-white/10 bg-[#0b1226]/80">
+                    <video
+                      src={`/api/media/${video.mediaId}`}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      aria-label={video.title || media?.name || "Video kenangan"}
+                      className="aspect-video w-full bg-black object-contain"
+                    />
+                    <div className="space-y-3 p-4">
+                      <p className="truncate text-xs text-[#fdf3d8]/55" title={media?.name}>{media?.name}</p>
+                      <input
+                        value={video.title}
+                        onChange={(event) => setGallery(updateVideo(gallery, video.mediaId, { title: event.target.value }))}
+                        placeholder="Judul video"
+                        maxLength={255}
+                        className="w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-[#f8fafc] placeholder:text-white/40"
+                      />
+                      <textarea
+                        value={video.description}
+                        onChange={(event) => setGallery(updateVideo(gallery, video.mediaId, { description: event.target.value }))}
+                        placeholder="Cerita video ini…"
+                        rows={2}
+                        className="w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-[#f8fafc] placeholder:text-white/40"
+                      />
+                      <label className="block text-xs text-[#fdf3d8]/70">
+                        Tanggal kenangan (opsional)
+                        <input
+                          type="date"
+                          value={video.memoryDate ?? ""}
+                          onChange={(event) => setGallery(updateVideo(gallery, video.mediaId, { memoryDate: event.target.value || null }))}
+                          className="mt-1 w-full rounded-md border border-white/15 bg-[#0b1226] px-3 py-2 text-sm text-[#f8fafc]"
+                        />
+                      </label>
+                      <div className="flex items-center justify-between">
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => setGallery(moveVideo(gallery, index, -1))} disabled={index === 0} aria-label="Naikkan urutan video" className="rounded-md border border-white/20 px-3 py-1 text-xs disabled:opacity-40">↑</button>
+                          <button type="button" onClick={() => setGallery(moveVideo(gallery, index, 1))} disabled={index === gallery.videos.length - 1} aria-label="Turunkan urutan video" className="rounded-md border border-white/20 px-3 py-1 text-xs disabled:opacity-40">↓</button>
+                        </div>
+                        <button type="button" onClick={() => setPendingRemove(video.mediaId)} className="rounded-md border border-red-400/50 px-3 py-1 text-xs text-red-200 hover:bg-red-500/10">Hapus dari galeri</button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+          {gallery.photos.length > 0 && (
+          <section className="space-y-4">
+          <h4 className="font-display text-lg text-[#fdf3d8]">Foto Kenangan ({gallery.photos.length})</h4>
           <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {gallery.photos.map((photo, index) => {
               const media = mediaState.files.find((f) => f.id === photo.mediaId);
@@ -785,13 +895,16 @@ export default function AdminArchiveGallery() {
               );
             })}
           </ol>
+          </section>
+          )}
+          </>
         )}
       </section>
 
       <ConfirmDialog
         open={pendingRemove !== null}
-        title="Hapus foto dari galeri?"
-        description="Foto ini dihapus dari galeri arsip. Berkas media sumbernya TIDAK dihapus dan tetap ada di Pustaka Media."
+        title="Hapus media dari galeri?"
+        description="Media ini dihapus dari susunan galeri saja. Berkas sumber tetap tersimpan di server dan Pustaka Media."
         confirmLabel="Hapus dari galeri"
         onConfirm={confirmRemove}
         onCancel={() => setPendingRemove(null)}

@@ -54,23 +54,27 @@ describe("isUndefinedTableError", () => {
 });
 
 describe("selectGallery", () => {
-  it("shapes an intro and sorts photos by position", async () => {
+  it("shapes an intro and sorts gallery photos and videos by position", async () => {
     fake.when("FROM private_archive_media", () =>
       rowsResult([
         { media_id: IMG_B, role: "photo", title: "B", description: "", memory_date: null, position: 1 },
         { media_id: VID, role: "intro", title: "", description: "", memory_date: null, position: 0 },
         { media_id: IMG_A, role: "photo", title: "A", description: "", memory_date: "2026-01-02", position: 0 },
+        { media_id: VID.replace("3333", "4444"), role: "video", title: "Video", description: "", memory_date: null, position: 1 },
       ]),
     );
     const gallery = await selectGallery();
     expect(gallery.introMediaId).toBe(VID);
     expect(gallery.photos.map((p) => p.mediaId)).toEqual([IMG_A, IMG_B]);
+    expect(gallery.videos.map((video) => video.mediaId)).toEqual([
+      VID.replace("3333", "4444"),
+    ]);
     expect(gallery.photos[0].memoryDate).toBe("2026-01-02");
   });
 
   it("returns an empty gallery when there are no rows", async () => {
     fake.when("FROM private_archive_media", () => rowsResult([]));
-    expect(await selectGallery()).toEqual({ introMediaId: null, photos: [] });
+    expect(await selectGallery()).toEqual({ introMediaId: null, photos: [], videos: [] });
   });
 
   it("raises GalleryNotMigratedError when the table is missing", async () => {
@@ -86,6 +90,7 @@ describe("replaceGallery", () => {
         { media_id: VID, role: "intro", title: "", description: "", memory_date: null, position: 0 },
         { media_id: IMG_A, role: "photo", title: "A", description: "Cerita", memory_date: "2026-01-02", position: 0 },
         { media_id: IMG_B, role: "photo", title: "B", description: "", memory_date: null, position: 1 },
+        { media_id: IMG_B.replace("2222", "4444"), role: "video", title: "V", description: "", memory_date: null, position: 0 },
       ]),
     );
 
@@ -94,6 +99,9 @@ describe("replaceGallery", () => {
       photos: [
         { mediaId: IMG_A, title: "A", description: "Cerita", memoryDate: "2026-01-02" },
         { mediaId: IMG_B, title: "B", description: "", memoryDate: null },
+      ],
+      videos: [
+        { mediaId: IMG_B.replace("2222", "4444"), title: "V", description: "", memoryDate: null },
       ],
     });
 
@@ -108,24 +116,25 @@ describe("replaceGallery", () => {
     // params: slug, admin id, mediaIds, roles, titles, descriptions, dates, positions
     expect(params[0]).toBe("tentang-ibumu");
     expect(params[1]).toBe("admin-1");
-    expect(params[2]).toEqual([VID, IMG_A, IMG_B]);
-    expect(params[3]).toEqual(["intro", "photo", "photo"]);
-    expect(params[7]).toEqual([0, 0, 1]);
+    expect(params[2]).toEqual([VID, IMG_A, IMG_B, IMG_B.replace("2222", "4444")]);
+    expect(params[3]).toEqual(["intro", "photo", "photo", "video"]);
+    expect(params[7]).toEqual([0, 0, 1, 0]);
 
     expect(gallery.introMediaId).toBe(VID);
     expect(gallery.photos.map((p) => p.mediaId)).toEqual([IMG_A, IMG_B]);
+    expect(gallery.videos.map((video) => video.mediaId)).toEqual([IMG_B.replace("2222", "4444")]);
   });
 
-  it("handles an empty gallery (no intro, no photos)", async () => {
+  it("handles an empty gallery (no intro, photos, or videos)", async () => {
     fake.when("INSERT INTO private_archive_media", () => rowsResult([]));
-    const gallery = await replaceGallery(admin, { introMediaId: null, photos: [] });
-    expect(gallery).toEqual({ introMediaId: null, photos: [] });
+    const gallery = await replaceGallery(admin, { introMediaId: null, photos: [], videos: [] });
+    expect(gallery).toEqual({ introMediaId: null, photos: [], videos: [] });
   });
 
   it("raises GalleryNotMigratedError when the table is missing", async () => {
     fake.when("INSERT INTO private_archive_media", undefinedTable);
     await expect(
-      replaceGallery(admin, { introMediaId: null, photos: [] }),
+      replaceGallery(admin, { introMediaId: null, photos: [], videos: [] }),
     ).rejects.toBeInstanceOf(GalleryNotMigratedError);
   });
 });

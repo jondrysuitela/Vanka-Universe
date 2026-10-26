@@ -12,8 +12,10 @@ import { describe, expect, it } from "vitest";
 
 const DB_DIR = fileURLToPath(new URL("../../../../db/", import.meta.url));
 const MIGRATION = "draft_migration_4g39_archive_gallery.sql";
+const VIDEO_MIGRATION = "draft_migration_4g39v_archive_gallery_videos.sql";
 
 const draft = readFileSync(path.join(DB_DIR, MIGRATION), "utf8");
+const videoDraft = readFileSync(path.join(DB_DIR, VIDEO_MIGRATION), "utf8");
 
 describe("archive gallery draft migration — draft markers & structure", () => {
   it("is clearly marked DRAFT / not executed", () => {
@@ -57,14 +59,29 @@ describe("archive gallery draft migration — table contract", () => {
     }
   });
 
+  describe("archive gallery video migration — additive role update", () => {
+    it("is draft-only and wraps the update in one transaction", () => {
+      expect(videoDraft).toContain("DRAFT MIGRATION 4G.39V");
+      expect(videoDraft).toContain("not applied");
+      expect(videoDraft.match(/^BEGIN;/gm)).toHaveLength(1);
+      expect(videoDraft.match(/^COMMIT;/gm)).toHaveLength(1);
+    });
+
+    it("requires the gallery table and idempotently allows intro, photo, and video", () => {
+      expect(videoDraft).toContain("private_archive_media is missing");
+      expect(videoDraft).toContain("DROP CONSTRAINT IF EXISTS chk_private_archive_media_role");
+      expect(videoDraft).toContain("CHECK (role IN ('intro', 'photo', 'video'))");
+    });
+  });
+
   it("cascades from private_archives and does NOT FK to media", () => {
     expect(draft).toContain("REFERENCES private_archives(id) ON DELETE CASCADE");
     // media table is unused by runtime, so no FK to it (documented decision).
     expect(draft).not.toContain("REFERENCES media(id)");
   });
 
-  it("constrains role to intro|photo and enforces one intro per archive", () => {
-    expect(draft).toContain("CHECK (role IN ('intro','photo'))");
+  it("constrains role to intro|photo|video and enforces one intro per archive", () => {
+    expect(draft).toContain("CHECK (role IN ('intro','photo','video'))");
     expect(draft).toContain("uq_private_archive_media_intro");
     expect(draft).toContain("WHERE role = 'intro'");
   });

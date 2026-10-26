@@ -31,10 +31,19 @@ export interface ExperienceVideo {
   name: string;
 }
 
+export interface ExperienceGalleryVideo {
+  mediaId: string;
+  name: string;
+  title: string;
+  description: string;
+  memoryDate: string | null;
+}
+
 export interface Experience {
   /** Intro video, or null when none is chosen (gallery opens directly). */
   intro: ExperienceVideo | null;
   photos: ExperiencePhoto[];
+  videos: ExperienceGalleryVideo[];
 }
 
 /** Build the render model, resolving media names and preserving server order. */
@@ -51,12 +60,22 @@ export function resolveExperience(gallery: ServerGallery, files: MediaFile[]): E
       description: photo.description,
       memoryDate: photo.memoryDate,
     }));
+  const videos = gallery.videos
+    .slice()
+    .sort((a, b) => a.position - b.position)
+    .map((video) => ({
+      mediaId: video.mediaId,
+      name: byId.get(video.mediaId)?.name ?? "Video",
+      title: video.title,
+      description: video.description,
+      memoryDate: video.memoryDate,
+    }));
 
   const intro = gallery.introMediaId
     ? { mediaId: gallery.introMediaId, name: byId.get(gallery.introMediaId)?.name ?? "Video pembuka" }
     : null;
 
-  return { intro, photos };
+  return { intro, photos, videos };
 }
 
 export type ExperienceLoadResult =

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -16,10 +16,8 @@ import {
  * SAFETY / HONESTY:
  * - Reads only the BROWSER-LOCAL draft. It never touches server private data,
  *   so there is no `?preview=1` PIN bypass and no publication-status change.
- * - No fabricated photos, narrative, or music: only what the admin actually
- *   typed. With no real media/audio assets, it shows honest empty states.
- * - Music obeys the toggle; nothing autoplays; audio stops and its source is
- *   released on unmount.
+ * - No fabricated photos or narrative: only what the admin actually typed.
+ *   With no real media assets, it shows an honest empty state.
  * - Respects `prefers-reduced-motion`.
  */
 
@@ -27,8 +25,6 @@ export default function ArchivePreviewPage() {
   const reduce = useReducedMotion();
   const [draft, setDraft] = useState<PrivateArchiveDraft>(EMPTY_ARCHIVE_DRAFT);
   const [opened, setOpened] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -38,33 +34,8 @@ export default function ArchivePreviewPage() {
     return () => cancelAnimationFrame(frame);
   }, [reduce]);
 
-  // Attach/detach the audio element. On detach (leaving the preview / session
-  // ending) playback stops and the source is released.
-  const attachAudio = useCallback((el: HTMLAudioElement | null) => {
-    if (!el && audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.removeAttribute("src");
-      audioRef.current.load();
-    }
-    audioRef.current = el;
-  }, []);
-
-  function toggleMusic() {
-    const el = audioRef.current;
-    if (!el) return;
-    if (el.paused) {
-      el.play()
-        .then(() => setPlaying(true))
-        .catch(() => setPlaying(false));
-    } else {
-      el.pause();
-      setPlaying(false);
-    }
-  }
-
   const title = draft.title.trim() || "Tentang Ibumu";
   const paragraphs = splitNarrative(draft.narrative);
-  const musicConfigured = draft.musicEnabled && draft.musicSrc.trim().length > 0;
 
   return (
     <div className="space-y-8">
@@ -127,27 +98,6 @@ export default function ArchivePreviewPage() {
             </div>
           </div>
 
-          {draft.musicEnabled && (
-            <div className="mx-auto max-w-2xl rounded-xl border border-white/10 bg-white/5 px-4 py-4 space-y-2">
-              <h2 className="text-sm font-medium text-[#fdf3d8]">Musik Kenangan</h2>
-              {musicConfigured ? (
-                <>
-                  <audio ref={attachAudio} src={draft.musicSrc} preload="none" />
-                  <button
-                    type="button"
-                    onClick={toggleMusic}
-                    className="rounded-lg border border-[#f6d77a]/40 px-5 py-2 text-sm text-[#f6d77a] hover:bg-[#f6d77a]/10 transition-colors"
-                  >
-                    {playing ? "Jeda Musik" : "Putar Musik Kenangan"}
-                  </button>
-                </>
-              ) : (
-                <p className="text-sm text-[#fdf3d8]/70">
-                  Musik diaktifkan, tetapi belum ada aset audio yang dipilih — tidak ada yang bisa diputar.
-                </p>
-              )}
-            </div>
-          )}
         </section>
       )}
     </div>

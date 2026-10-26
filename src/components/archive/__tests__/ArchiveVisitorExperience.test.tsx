@@ -14,6 +14,7 @@ afterEach(() => {
 
 const INTRO = "33333333-3333-4333-8333-333333333333";
 const IMG = "11111111-1111-4111-8111-111111111111";
+const VIDEO = "44444444-4444-4444-8444-444444444444";
 
 const FULL = {
   title: "Tentang Ibumu",
@@ -23,6 +24,7 @@ const FULL = {
   photos: [
     { mediaId: IMG, title: "Pantai", description: "Hari itu", memoryDate: "2020-01-01", position: 0 },
   ],
+  videos: [],
 };
 
 const EMPTY = {
@@ -31,6 +33,7 @@ const EMPTY = {
   musicEnabled: false,
   introMediaId: null,
   photos: [],
+  videos: [],
 };
 
 function handlerFor(status: number, data?: unknown) {
@@ -68,15 +71,39 @@ describe("ArchiveVisitorExperience", () => {
     expect(html).not.toContain("access_token");
   });
 
-  it("shows an honest 'audio not available' note and builds no player", async () => {
+  it("does not show unsupported music controls or diagnostics", async () => {
     installFetchMock(handlerFor(200, FULL));
     const { container } = render(<ArchiveVisitorExperience onSessionEnded={vi.fn()} />);
 
     await screen.findByRole("heading", { level: 1, name: "Tentang Ibumu" });
-    expect(screen.getByText(ARCHIVE_VISITOR_MESSAGES.musicUnavailable)).toBeTruthy();
+    expect(container.textContent).not.toContain("Musik");
     expect(container.querySelectorAll("audio")).toHaveLength(0);
-    // Exactly one media element — the intro video — and nothing pretending to be music.
+    // The intro is the only video until gallery media is configured.
     expect(container.querySelectorAll("video")).toHaveLength(1);
+  });
+
+  it("renders gallery videos with browser playback controls through the visitor proxy", async () => {
+    installFetchMock(
+      handlerFor(200, {
+        ...FULL,
+        videos: [
+          {
+            mediaId: VIDEO,
+            title: "Perayaan keluarga",
+            description: "Hari yang hangat",
+            memoryDate: null,
+            position: 0,
+          },
+        ],
+      }),
+    );
+    const { container } = render(<ArchiveVisitorExperience onSessionEnded={vi.fn()} />);
+
+    const video = (await screen.findByLabelText("Perayaan keluarga")) as HTMLVideoElement;
+    expect(video.getAttribute("src")).toBe(experienceMediaUrl(VIDEO));
+    expect(video.hasAttribute("controls")).toBe(true);
+    expect(container.querySelectorAll("video")).toHaveLength(2);
+    expect(screen.getByText("Hari yang hangat")).toBeTruthy();
   });
 
   it("renders an honest empty state when there is no content", async () => {

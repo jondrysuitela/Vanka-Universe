@@ -51,6 +51,7 @@ export async function GET(request: Request, ctx: RouteContext): Promise<Response
     const allowed = new Set<string>();
     if (gallery.introMediaId) allowed.add(gallery.introMediaId);
     for (const photo of gallery.photos) allowed.add(photo.mediaId);
+    for (const video of gallery.videos) allowed.add(video.mediaId);
     if (!allowed.has(id)) {
       // 404 (not 403): do not confirm the existence of unrelated media.
       return jsonError(404, "NOT_FOUND", "Media tidak ditemukan.");

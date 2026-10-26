@@ -40,6 +40,7 @@ const VISITOR_COOKIE = "vanka_archive_access=visitor-token";
 const IMG_A = "11111111-1111-4111-8111-111111111111";
 const IMG_B = "22222222-2222-4222-8222-222222222222";
 const VID = "33333333-3333-4333-8333-333333333333";
+const VIDEO_A = "44444444-4444-4444-8444-444444444444";
 
 type Fake = ReturnType<typeof createFakePool>;
 
@@ -77,7 +78,7 @@ function setupArchive(fake: Fake, opts: { row?: typeof archiveRow | null } = {})
   }));
 }
 
-/** Gallery with an intro video and one photo. */
+/** Gallery with an intro video, a gallery video, and one photo. */
 function setupGallery(fake: Fake, opts: { migrated?: boolean; empty?: boolean } = {}) {
   if (opts.migrated === false) {
     fake.when("FROM private_archive_media", () => {
@@ -90,6 +91,7 @@ function setupGallery(fake: Fake, opts: { migrated?: boolean; empty?: boolean } 
     : [
         { media_id: VID, role: "intro", title: "", description: "", memory_date: null, position: 0 },
         { media_id: IMG_A, role: "photo", title: "A", description: "Cerita", memory_date: null, position: 0 },
+        { media_id: VIDEO_A, role: "video", title: "Video", description: "Kenangan", memory_date: null, position: 0 },
       ];
   fake.when("FROM private_archive_media", () => ({ rows, rowCount: rows.length }));
 }
@@ -132,7 +134,7 @@ describe("GET /api/archive/experience", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns title, narrative, music status, intro and photos, with no internals", async () => {
+  it("returns title, narrative, intro and gallery media, with no internals", async () => {
     setupSession(fake);
     setupArchive(fake);
     setupGallery(fake);
@@ -147,6 +149,9 @@ describe("GET /api/archive/experience", () => {
     expect(data.musicEnabled).toBe(true);
     expect(data.introMediaId).toBe(VID);
     expect((data.photos as Array<{ mediaId: string }>).map((p) => p.mediaId)).toEqual([IMG_A]);
+    expect((data.videos as Array<{ mediaId: string }>).map((video) => video.mediaId)).toEqual([
+      VIDEO_A,
+    ]);
 
     // No storage internals, audio URL, or music id leak.
     const text = JSON.stringify(payload);
@@ -171,6 +176,7 @@ describe("GET /api/archive/experience", () => {
       musicEnabled: false,
       introMediaId: null,
       photos: [],
+      videos: [],
     });
   });
 
@@ -249,6 +255,24 @@ describe("GET /api/archive/experience/media/[id]", () => {
     expect(res.headers.get("Content-Type")).toBe("image/jpeg");
     expect(res.headers.get("Accept-Ranges")).toBe("bytes");
     expect(await res.text()).toBe("hello");
+  });
+
+  it("streams an allowlisted gallery video through the visitor proxy", async () => {
+    setupSession(fake);
+    setupGallery(fake);
+    h.files.set(VIDEO_A, {
+      record: { id: VIDEO_A, name: "memory.mp4", mime: "video/mp4", kind: "video", size: 5 },
+      data: Buffer.from("video"),
+    });
+    const res = await experienceMediaGet(
+      new Request(`${BASE}/api/archive/experience/media/${VIDEO_A}`, {
+        headers: { cookie: VISITOR_COOKIE },
+      }),
+      ctx(VIDEO_A),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("video/mp4");
+    expect(h.readCalls).toEqual([VIDEO_A]);
   });
 
   it("honours a Range request (206 with Content-Range)", async () => {

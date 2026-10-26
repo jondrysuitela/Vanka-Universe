@@ -33,7 +33,7 @@ export interface MediaFile {
   kind: MediaKind;
 }
 
-export interface ServerGalleryPhoto {
+export interface ServerGalleryItem {
   mediaId: string;
   title: string;
   description: string;
@@ -43,11 +43,12 @@ export interface ServerGalleryPhoto {
 
 export interface ServerGallery {
   introMediaId: string | null;
-  photos: ServerGalleryPhoto[];
+  photos: ServerGalleryItem[];
+  videos: ServerGalleryItem[];
 }
 
-/** Editor photo input (position is derived from array order, never stored here). */
-export interface GalleryPhotoState {
+/** Editor gallery item (position is derived from array order, never stored here). */
+export interface GalleryItemState {
   mediaId: string;
   title: string;
   description: string;
@@ -57,10 +58,11 @@ export interface GalleryPhotoState {
 /** The full in-memory gallery edit state. */
 export interface GalleryState {
   introMediaId: string | null;
-  photos: GalleryPhotoState[];
+  photos: GalleryItemState[];
+  videos: GalleryItemState[];
 }
 
-export const EMPTY_GALLERY_STATE: GalleryState = { introMediaId: null, photos: [] };
+export const EMPTY_GALLERY_STATE: GalleryState = { introMediaId: null, photos: [], videos: [] };
 
 /* ----------------------------------------------------------------------- */
 /* Low-level guards                                                        */
@@ -79,7 +81,7 @@ function isMediaFile(value: unknown): value is MediaFile {
   );
 }
 
-function isServerGalleryPhoto(value: unknown): value is ServerGalleryPhoto {
+function isServerGalleryItem(value: unknown): value is ServerGalleryItem {
   if (!isRecord(value)) return false;
   return (
     typeof value.mediaId === "string" &&
@@ -92,8 +94,8 @@ function isServerGalleryPhoto(value: unknown): value is ServerGalleryPhoto {
 function isServerGallery(value: unknown): value is ServerGallery {
   if (!isRecord(value)) return false;
   if (value.introMediaId !== null && typeof value.introMediaId !== "string") return false;
-  if (!Array.isArray(value.photos)) return false;
-  return value.photos.every(isServerGalleryPhoto);
+  if (!Array.isArray(value.photos) || !value.photos.every(isServerGalleryItem)) return false;
+  return Array.isArray(value.videos) && value.videos.every(isServerGalleryItem);
 }
 
 async function readJson(res: Response): Promise<unknown> {
@@ -141,7 +143,7 @@ export async function loadMediaFiles(fetcher: FetchLike): Promise<MediaLoadResul
   return { status: "ok", files: data.filter(isMediaFile) };
 }
 
-/** Split the media library into usable videos (intro) and images (photos). */
+/** Split the media library into videos and images. */
 export function splitMedia(files: MediaFile[]): { videos: MediaFile[]; images: MediaFile[] } {
   return {
     videos: files.filter((file) => file.kind === "video"),
@@ -153,16 +155,20 @@ export function splitMedia(files: MediaFile[]): { videos: MediaFile[]; images: M
 /* Pure editor operations (never mutate the input)                         */
 /* ----------------------------------------------------------------------- */
 
-/** True when a media id is already the intro or one of the photos. */
+/** True when a media id is already used as the intro or a gallery item. */
 export function isMediaUsed(state: GalleryState, mediaId: string): boolean {
-  return state.introMediaId === mediaId || state.photos.some((p) => p.mediaId === mediaId);
+  return (
+    state.introMediaId === mediaId ||
+    state.photos.some((item) => item.mediaId === mediaId) ||
+    state.videos.some((item) => item.mediaId === mediaId)
+  );
 }
 
 export type AddMediaResult =
   | { ok: true; state: GalleryState }
   | { ok: false; reason: "used" };
 
-/** Append a photo; refuses a duplicate (intro or existing photo). */
+/** Append a photo; refuses a duplicate intro or gallery item. */
 export function addPhoto(state: GalleryState, mediaId: string): AddMediaResult {
   if (isMediaUsed(state, mediaId)) return { ok: false, reason: "used" };
   return {
@@ -174,20 +180,48 @@ export function addPhoto(state: GalleryState, mediaId: string): AddMediaResult {
   };
 }
 
+export function addVideo(state: GalleryState, mediaId: string): AddMediaResult {
+  if (isMediaUsed(state, mediaId)) return { ok: false, reason: "used" };
+  return {
+    ok: true,
+    state: {
+      ...state,
+      videos: [...state.videos, { mediaId, title: "", description: "", memoryDate: null }],
+    },
+  };
+}
+
 /** Remove a photo from the gallery. The source file is never touched. */
 export function removePhoto(state: GalleryState, mediaId: string): GalleryState {
   return { ...state, photos: state.photos.filter((p) => p.mediaId !== mediaId) };
 }
 
-/** Patch one photo's individual metadata. */
+export function removeVideo(state: GalleryState, mediaId: string): GalleryState {
+  return { ...state, videos: state.videos.filter((item) => item.mediaId !== mediaId) };
+}
+
+/** Patch one gallery item's individual metadata. */
 export function updatePhoto(
   state: GalleryState,
   mediaId: string,
-  patch: Partial<Omit<GalleryPhotoState, "mediaId">>,
+  patch: Partial<Omit<GalleryItemState, "mediaId">>,
 ): GalleryState {
   return {
     ...state,
     photos: state.photos.map((p) => (p.mediaId === mediaId ? { ...p, ...patch } : p)),
+  };
+}
+
+export function updateVideo(
+  state: GalleryState,
+  mediaId: string,
+  patch: Partial<Omit<GalleryItemState, "mediaId">>,
+): GalleryState {
+  return {
+    ...state,
+    videos: state.videos.map((item) =>
+      item.mediaId === mediaId ? { ...item, ...patch } : item,
+    ),
   };
 }
 
@@ -202,13 +236,23 @@ export function movePhoto(state: GalleryState, index: number, delta: number): Ga
   return { ...state, photos };
 }
 
+export function moveVideo(state: GalleryState, index: number, delta: number): GalleryState {
+  const target = index + delta;
+  if (index < 0 || index >= state.videos.length) return state;
+  if (target < 0 || target >= state.videos.length) return state;
+  const videos = state.videos.slice();
+  const [item] = videos.splice(index, 1);
+  videos.splice(target, 0, item);
+  return { ...state, videos };
+}
+
 /**
- * Set/clear the intro video. Setting an id already used by a photo is refused
- * so the server's uniqueness rule is mirrored client-side.
+ * Set/clear the intro video. Setting an id already used in the gallery is
+ * refused so the server's uniqueness rule is mirrored client-side.
  */
 export function setIntro(state: GalleryState, mediaId: string | null): AddMediaResult {
   if (mediaId === null) return { ok: true, state: { ...state, introMediaId: null } };
-  if (state.photos.some((p) => p.mediaId === mediaId)) return { ok: false, reason: "used" };
+  if (isMediaUsed({ ...state, introMediaId: null }, mediaId)) return { ok: false, reason: "used" };
   return { ok: true, state: { ...state, introMediaId: mediaId } };
 }
 
@@ -218,7 +262,8 @@ export function setIntro(state: GalleryState, mediaId: string | null): AddMediaR
 
 export interface GalleryRequestBody {
   introMediaId: string | null;
-  photos: Array<{ mediaId: string; title: string; description: string; memoryDate: string | null }>;
+  photos: GalleryItemState[];
+  videos: GalleryItemState[];
 }
 
 /** Exact body accepted by `PUT /api/archive/gallery`. Position = array order. */
@@ -230,6 +275,12 @@ export function toGalleryBody(state: GalleryState): GalleryRequestBody {
       title: p.title,
       description: p.description,
       memoryDate: p.memoryDate,
+    })),
+    videos: state.videos.map((item) => ({
+      mediaId: item.mediaId,
+      title: item.title,
+      description: item.description,
+      memoryDate: item.memoryDate,
     })),
   };
 }
@@ -245,22 +296,33 @@ export function fromServerGallery(gallery: ServerGallery): GalleryState {
       description: p.description,
       memoryDate: p.memoryDate,
     }));
-  return { introMediaId: gallery.introMediaId, photos };
+  const videos = gallery.videos
+    .slice()
+    .sort((a, b) => a.position - b.position)
+    .map((item) => ({
+      mediaId: item.mediaId,
+      title: item.title,
+      description: item.description,
+      memoryDate: item.memoryDate,
+    }));
+  return { introMediaId: gallery.introMediaId, photos, videos };
 }
 
 /** True when the two gallery states are equal (used for dirty tracking). */
 export function galleryStatesEqual(a: GalleryState, b: GalleryState): boolean {
   if (a.introMediaId !== b.introMediaId) return false;
-  if (a.photos.length !== b.photos.length) return false;
-  return a.photos.every((p, i) => {
-    const q = b.photos[i];
-    return (
-      p.mediaId === q.mediaId &&
-      p.title === q.title &&
-      p.description === q.description &&
-      p.memoryDate === q.memoryDate
-    );
-  });
+  const sameItems = (left: GalleryItemState[], right: GalleryItemState[]) =>
+    left.length === right.length &&
+    left.every((item, index) => {
+      const other = right[index];
+      return (
+        item.mediaId === other.mediaId &&
+        item.title === other.title &&
+        item.description === other.description &&
+        item.memoryDate === other.memoryDate
+      );
+    });
+  return sameItems(a.photos, b.photos) && sameItems(a.videos, b.videos);
 }
 
 /* ----------------------------------------------------------------------- */

@@ -4,6 +4,7 @@ import {
   GALLERY_URL,
   MEDIA_URL,
   addPhoto,
+  addVideo,
   fromServerGallery,
   galleryLoadNote,
   gallerySaveMessage,
@@ -12,12 +13,15 @@ import {
   loadGallery,
   loadMediaFiles,
   movePhoto,
+  moveVideo,
   removePhoto,
+  removeVideo,
   saveGallery,
   setIntro,
   splitMedia,
   toGalleryBody,
   updatePhoto,
+  updateVideo,
   type FetchLike,
   type GalleryState,
   type MediaFile,
@@ -62,6 +66,7 @@ function serverGallery(overrides: Partial<ServerGallery> = {}): ServerGallery {
   return {
     introMediaId: VID,
     photos: [{ mediaId: IMG_A, title: "A", description: "Cerita", memoryDate: null, position: 0 }],
+    videos: [],
     ...overrides,
   };
 }
@@ -70,6 +75,7 @@ function state(overrides: Partial<GalleryState> = {}): GalleryState {
   return {
     introMediaId: null,
     photos: [{ mediaId: IMG_A, title: "A", description: "Cerita", memoryDate: null }],
+    videos: [],
     ...overrides,
   };
 }
@@ -136,6 +142,22 @@ describe("pure editor operations", () => {
     expect(addPhoto(state(), IMG_A)).toEqual({ ok: false, reason: "used" });
   });
 
+  it("adds, updates, removes, and moves videos independently", () => {
+    const added = addVideo(state(), VID);
+    expect(added.ok).toBe(true);
+    if (!added.ok) return;
+
+    const updated = updateVideo(added.state, VID, { title: "Liburan" });
+    expect(updated.videos[0].title).toBe("Liburan");
+
+    const withAnother = addVideo(updated, IMG_B);
+    expect(withAnother.ok).toBe(true);
+    if (!withAnother.ok) return;
+    expect(moveVideo(withAnother.state, 0, 1).videos.map((item) => item.mediaId)).toEqual([IMG_B, VID]);
+    expect(removeVideo(withAnother.state, VID).videos.map((item) => item.mediaId)).toEqual([IMG_B]);
+    expect(addVideo(state({ introMediaId: VID }), VID)).toEqual({ ok: false, reason: "used" });
+  });
+
   it("removes a photo without touching other entries", () => {
     const next = removePhoto(state({ photos: [
       { mediaId: IMG_A, title: "A", description: "", memoryDate: null },
@@ -185,6 +207,7 @@ describe("transport mapping", () => {
     expect(body).toEqual({
       introMediaId: VID,
       photos: [{ mediaId: IMG_A, title: "A", description: "Cerita", memoryDate: null }],
+      videos: [],
     });
   });
 
@@ -195,6 +218,7 @@ describe("transport mapping", () => {
         { mediaId: IMG_B, title: "B", description: "", memoryDate: null, position: 1 },
         { mediaId: IMG_A, title: "A", description: "", memoryDate: null, position: 0 },
       ],
+      videos: [],
     });
     expect(g.photos.map((p) => p.mediaId)).toEqual([IMG_A, IMG_B]);
     expect(g.introMediaId).toBe(VID);

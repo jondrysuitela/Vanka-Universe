@@ -16,14 +16,12 @@ import {
  * Arsip Privat — read-only visitor experience (Tahap VU-ARCHIVE-ACCESS-4A).
  *
  * Loads `GET /api/archive/experience` (visitor session only). It renders the
- * archive's OWN title/narrative (never substitute copy), the intro video, and the
- * photo gallery — all media through the authenticated visitor proxy.
+ * archive's OWN title/narrative (never substitute copy), the intro video, and
+ * the video/photo gallery — all media through the authenticated visitor proxy.
  *
  * Honest states:
  *  - `401` → the visitor session is gone: `onSessionEnded()` returns to the PIN gate.
  *  - `503` → "archive not ready"; private data is NOT opened (no empty gallery pretence).
- *  - `musicEnabled` → shows an "audio not available" note; NO fake player is built,
- *    because `MediaStore` does not support audio yet.
  *
  * Reduced motion is respected with `motion-safe:` transitions.
  */
@@ -174,15 +172,6 @@ export default function ArchiveVisitorExperience({
         </header>
       )}
 
-      {data.musicEnabled && (
-        <p
-          role="status"
-          className="mx-auto w-full max-w-2xl rounded-2xl border border-[#e9c67c]/30 bg-[#e9c67c]/10 px-4 py-3 text-center text-sm text-[#f0d9a4]"
-        >
-          {ARCHIVE_VISITOR_MESSAGES.musicUnavailable}
-        </p>
-      )}
-
       {data.introMediaId && !introFailed && (
         <div className="backdrop-blur-glass overflow-hidden rounded-3xl p-3 sm:p-4">
           <div className="overflow-hidden rounded-2xl bg-black">
@@ -208,8 +197,8 @@ export default function ArchiveVisitorExperience({
         </p>
       )}
 
-      {data.photos.length > 0 ? (
-        <ArchivePhotoGallery photos={data.photos} />
+      {data.photos.length > 0 || data.videos.length > 0 ? (
+        <ArchivePhotoGallery photos={data.photos} videos={data.videos} />
       ) : (
         !data.introMediaId && (
           <p className="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-white/70">

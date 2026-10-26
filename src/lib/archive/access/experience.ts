@@ -9,7 +9,7 @@ import type { PrivateArchiveRow } from "@/lib/archive/repository";
  *
  * HONESTY: `musicEnabled` reports the stored flag only. Audio is NOT supported
  * by `MediaStore` (media kinds are image|video), so no music URL/track is
- * emitted and the UI must not pretend playback is possible.
+ * emitted; the UI keeps the unsupported control hidden.
  */
 
 export interface VisitorExperiencePhoto {
@@ -20,20 +20,22 @@ export interface VisitorExperiencePhoto {
   position: number;
 }
 
+export type VisitorExperienceVideo = VisitorExperiencePhoto;
+
 export interface VisitorExperience {
   /** Archive title, or "" when the archive row does not exist yet. */
   title: string;
   /** Archive narrative, or "" when unset. */
   narrative: string;
   /**
-   * Stored soundtrack flag. `true` does NOT imply a playable asset exists —
-   * audio is unsupported today; the UI must render an honest "not available"
-   * state rather than a player.
+   * Legacy stored soundtrack flag. Audio is not surfaced until playback and
+   * media storage are supported; the flag remains intact for compatibility.
    */
   musicEnabled: boolean;
   /** Intro video media id, or null. Bytes are served by the visitor media proxy. */
   introMediaId: string | null;
   photos: VisitorExperiencePhoto[];
+  videos: VisitorExperienceVideo[];
 }
 
 export function buildVisitorExperience(
@@ -51,6 +53,13 @@ export function buildVisitorExperience(
       description: photo.description,
       memoryDate: photo.memoryDate,
       position: photo.position,
+    })),
+    videos: gallery.videos.map((video) => ({
+      mediaId: video.mediaId,
+      title: video.title,
+      description: video.description,
+      memoryDate: video.memoryDate,
+      position: video.position,
     })),
   };
 }

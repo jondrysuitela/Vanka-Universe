@@ -24,7 +24,7 @@ import type { SaveGalleryInput } from "@/lib/archive/gallery-schema";
  * an existing archive row.
  */
 
-export interface GalleryPhoto {
+export interface GalleryItem {
   mediaId: string;
   title: string;
   description: string;
@@ -35,12 +35,13 @@ export interface GalleryPhoto {
 export interface PrivateGallery {
   /** Intro video media id, or null when none is chosen. */
   introMediaId: string | null;
-  photos: GalleryPhoto[];
+  photos: GalleryItem[];
+  videos: GalleryItem[];
 }
 
 interface ArchiveMediaRow {
   media_id: string;
-  role: "intro" | "photo";
+  role: "intro" | "photo" | "video";
   title: string;
   description: string;
   memory_date: string | null;
@@ -83,7 +84,17 @@ function shapeGallery(rows: ArchiveMediaRow[]): PrivateGallery {
       position: row.position,
     }))
     .sort((a, b) => a.position - b.position);
-  return { introMediaId: intro ? intro.media_id : null, photos };
+  const videos = rows
+    .filter((row) => row.role === "video")
+    .map((row) => ({
+      mediaId: row.media_id,
+      title: row.title,
+      description: row.description,
+      memoryDate: row.memory_date,
+      position: row.position,
+    }))
+    .sort((a, b) => a.position - b.position);
+  return { introMediaId: intro ? intro.media_id : null, photos, videos };
 }
 
 /** Read the singleton gallery. Raises `GalleryNotMigratedError` when unmigrated. */
@@ -106,7 +117,7 @@ export async function selectGallery(): Promise<PrivateGallery> {
 }
 
 /**
- * Atomically replace the whole gallery (intro + ordered photos).
+ * Atomically replace the whole gallery (intro + ordered photos/videos).
  *
  * - `position` is 0-based per role, taken from input order (photos) / 0 (intro).
  * - Rows whose media is no longer present are removed; the rest are updated.
@@ -137,6 +148,14 @@ export async function replaceGallery(
     titles.push(photo.title);
     descriptions.push(photo.description);
     dates.push(photo.memoryDate);
+    positions.push(index);
+  });
+  input.videos.forEach((video, index) => {
+    mediaIds.push(video.mediaId);
+    roles.push("video");
+    titles.push(video.title);
+    descriptions.push(video.description);
+    dates.push(video.memoryDate);
     positions.push(index);
   });
 

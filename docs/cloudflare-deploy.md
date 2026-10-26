@@ -73,6 +73,7 @@ db/draft_migration_4c2a_auth_foundation.sql    (admins.password_hash, sessions, 
 db/draft_migration_4g26_birthday_letters.sql   (birthday_letters)
 db/draft_migration_4g27_private_archive.sql    (private_archives)
 db/draft_migration_4g39_archive_gallery.sql    (private_archive_media)
+db/draft_migration_4g39v_archive_gallery_videos.sql (video items in private gallery)
 db/draft_migration_4g40d3b_media_objects.sql   (media_objects)
 db/draft_migration_4g41_archive_access.sql     (archive_access_sessions, archive_access_attempts)
 ```
@@ -102,6 +103,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/draft_migrati
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/draft_migration_4g26_birthday_letters.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/draft_migration_4g27_private_archive.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/draft_migration_4g39_archive_gallery.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/draft_migration_4g39v_archive_gallery_videos.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/draft_migration_4g40d3b_media_objects.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/draft_migration_4g41_archive_access.sql
 ```

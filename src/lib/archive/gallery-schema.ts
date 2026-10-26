@@ -12,18 +12,18 @@ import { isIsoDate } from "@/lib/media/schema";
  * smuggled in either: the gallery references media ONLY by validated media id.
  *
  * The route additionally validates each `mediaId` against the real media store
- * (must exist, and be `image` for a photo / `video` for the intro). This schema
- * checks shape, uniqueness, and that the intro is not reused as a photo.
+ * (must exist, and match the gallery role). This schema checks shape,
+ * uniqueness, and that the intro is not reused in the gallery.
  */
 
 /** Hard cap so a single save can never submit an unbounded gallery. */
-export const MAX_GALLERY_PHOTOS = 200;
+export const MAX_GALLERY_ITEMS = 200;
 
 const isoDate = z
   .string()
   .refine(isIsoDate, { message: "Format tanggal harus YYYY-MM-DD yang valid." });
 
-export const galleryPhotoSchema = z.strictObject({
+const galleryItemSchema = z.strictObject({
   mediaId: z.uuid(),
   title: z.string().trim().max(255),
   description: z.string().max(5000),
@@ -38,21 +38,35 @@ export const saveGallerySchema = z
      * enforced against the real media store in the route.
      */
     introMediaId: z.uuid().nullable().optional().transform((value) => value ?? null),
-    photos: z.array(galleryPhotoSchema).max(MAX_GALLERY_PHOTOS),
+    photos: z.array(galleryItemSchema).max(MAX_GALLERY_ITEMS),
+    videos: z.array(galleryItemSchema).max(MAX_GALLERY_ITEMS).default([]),
   })
   .refine(
-    (value) => new Set(value.photos.map((photo) => photo.mediaId)).size === value.photos.length,
-    { message: "Media foto duplikat dalam galeri.", path: ["photos"] },
+    (value) => value.photos.length + value.videos.length <= MAX_GALLERY_ITEMS,
+    {
+      message: `Galeri maksimal berisi ${MAX_GALLERY_ITEMS} media.`,
+      path: ["videos"],
+    },
+  )
+  .refine(
+    (value) => {
+      const mediaIds = [
+        ...value.photos.map((item) => item.mediaId),
+        ...value.videos.map((item) => item.mediaId),
+      ];
+      return new Set(mediaIds).size === mediaIds.length;
+    },
+    { message: "Media duplikat dalam galeri.", path: ["photos"] },
   )
   .refine(
     (value) =>
       value.introMediaId === null ||
-      !value.photos.some((photo) => photo.mediaId === value.introMediaId),
+      ![...value.photos, ...value.videos].some((item) => item.mediaId === value.introMediaId),
     {
-      message: "Media tidak boleh menjadi video pembuka dan foto sekaligus.",
+      message: "Video pembuka tidak boleh dipakai sebagai item galeri.",
       path: ["introMediaId"],
     },
   );
 
-export type GalleryPhotoInput = z.output<typeof galleryPhotoSchema>;
+export type GalleryItemInput = z.output<typeof galleryItemSchema>;
 export type SaveGalleryInput = z.output<typeof saveGallerySchema>;

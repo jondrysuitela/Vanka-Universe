@@ -16,7 +16,7 @@ import {
 /**
  * Arsip Ibu — protected viewing experience (Tahap 4G.39C).
  *
- * Flow: intro video → transition → Polaroid gallery. Rendered ONLY inside the
+ * Flow: intro video → transition → private video/photo gallery. Rendered ONLY inside the
  * admin-protected area (`/admin/archive/experience`).
  *
  * HONEST STATE:
@@ -224,7 +224,7 @@ export default function ArchiveExperience() {
         </div>
       )}
 
-      <ArchiveGalleryView photos={experience?.photos ?? []} />
+      <ArchiveGalleryView photos={experience?.photos ?? []} videos={experience?.videos ?? []} />
     </div>
   );
 }

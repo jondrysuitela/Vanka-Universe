@@ -38,6 +38,7 @@ const CHAIN = [
   { key: "4g26", file: "draft_migration_4g26_birthday_letters.sql" },
   { key: "4g27", file: "draft_migration_4g27_private_archive.sql" },
   { key: "4g39", file: "draft_migration_4g39_archive_gallery.sql" },
+  { key: "4g39v", file: "draft_migration_4g39v_archive_gallery_videos.sql" },
   { key: "4g40d3b", file: "draft_migration_4g40d3b_media_objects.sql" },
   { key: "4g41", file: "draft_migration_4g41_archive_access.sql" },
   { key: "4g46", file: "draft_migration_4g46_birthday_music.sql" },

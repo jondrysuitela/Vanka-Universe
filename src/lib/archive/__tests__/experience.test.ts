@@ -42,12 +42,17 @@ function fakeFetcher(script: FakeResponse[] | ((call: Call, index: number) => Fa
 const IMG_A = "11111111-1111-4111-8111-111111111111";
 const IMG_B = "22222222-2222-4222-8222-222222222222";
 const VID = "33333333-3333-4333-8333-333333333333";
+const VIDEO_A = "44444444-4444-4444-8444-444444444444";
+const VIDEO_B = "55555555-5555-4555-8555-555555555555";
 
 function serverGallery(overrides: Partial<ServerGallery> = {}): ServerGallery {
   return {
     introMediaId: VID,
     photos: [
       { mediaId: IMG_A, title: "Ibu di dapur", description: "Pagi yang tenang.", memoryDate: "2001-05-02", position: 0 },
+    ],
+    videos: [
+      { mediaId: VIDEO_A, title: "Kenangan", description: "Cerita.", memoryDate: null, position: 0 },
     ],
     ...overrides,
   };
@@ -73,15 +78,23 @@ describe("resolveExperience", () => {
           { mediaId: IMG_B, title: "B", description: "kedua", memoryDate: null, position: 1 },
           { mediaId: IMG_A, title: "A", description: "pertama", memoryDate: null, position: 0 },
         ],
+        videos: [
+          { mediaId: VIDEO_B, title: "Video", description: "Kenangan", memoryDate: null, position: 1 },
+          { mediaId: VIDEO_A, title: "Video lain", description: "", memoryDate: null, position: 0 },
+        ],
       },
       [
         { id: IMG_A, name: "a.jpg", kind: "image" },
         { id: IMG_B, name: "b.jpg", kind: "image" },
         { id: VID, name: "v.mp4", kind: "video" },
+        { id: VIDEO_A, name: "memories.mp4", kind: "video" },
+        { id: VIDEO_B, name: "family.mp4", kind: "video" },
       ],
     );
     expect(experience.photos.map((p) => p.mediaId)).toEqual([IMG_A, IMG_B]);
     expect(experience.photos[0].name).toBe("a.jpg");
+    expect(experience.videos.map((video) => video.mediaId)).toEqual([VIDEO_A, VIDEO_B]);
+    expect(experience.videos[0].name).toBe("memories.mp4");
     expect(experience.intro).toEqual({ mediaId: VID, name: "v.mp4" });
   });
 
@@ -90,19 +103,21 @@ describe("resolveExperience", () => {
       {
         introMediaId: null,
         photos: [{ mediaId: IMG_A, title: "A", description: "", memoryDate: null, position: 0 }],
+        videos: [],
       },
       [],
     );
     expect(experience.intro).toBeNull();
     expect(experience.photos[0].name).toBe("Foto");
+    expect(experience.videos).toEqual([]);
   });
 });
 
 /* ----------------------------------------------------------- phase model */
 
 describe("phase model", () => {
-  const withIntro: Experience = { intro: { mediaId: VID, name: "v" }, photos: [] };
-  const withoutIntro: Experience = { intro: null, photos: [] };
+  const withIntro: Experience = { intro: { mediaId: VID, name: "v" }, photos: [], videos: [] };
+  const withoutIntro: Experience = { intro: null, photos: [], videos: [] };
 
   it("starts in intro when a video exists, else gallery", () => {
     expect(initialPhase(withIntro)).toBe("intro");

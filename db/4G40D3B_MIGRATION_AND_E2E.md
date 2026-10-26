@@ -47,7 +47,8 @@ Catatan: `uuid-ossp` **tidak** diperlukan oleh `4g40d3b` (tabel tidak memakai
 ## 1. Urutan migrasi
 
 1. `db/draft_migration_4g39_archive_gallery.sql` (Arsip Ibu) — kalau belum ada.
-2. `db/draft_migration_4g40d3b_media_objects.sql` (metadata media).
+2. `db/draft_migration_4g39v_archive_gallery_videos.sql` (dukungan video galeri).
+3. `db/draft_migration_4g40d3b_media_objects.sql` (metadata media).
 
 Aturan:
 - Satu berkas = satu transaksi (`BEGIN … COMMIT`). Jangan potong per-statement.

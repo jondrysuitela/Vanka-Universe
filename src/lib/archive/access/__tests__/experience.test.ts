@@ -22,6 +22,9 @@ const gallery: PrivateGallery = {
   photos: [
     { mediaId: "img-1", title: "A", description: "Cerita", memoryDate: "2020-01-01", position: 0 },
   ],
+  videos: [
+    { mediaId: "video-1", title: "B", description: "Kenangan", memoryDate: null, position: 0 },
+  ],
 };
 
 describe("buildVisitorExperience", () => {
@@ -35,6 +38,9 @@ describe("buildVisitorExperience", () => {
       photos: [
         { mediaId: "img-1", title: "A", description: "Cerita", memoryDate: "2020-01-01", position: 0 },
       ],
+      videos: [
+        { mediaId: "video-1", title: "B", description: "Kenangan", memoryDate: null, position: 0 },
+      ],
     });
     // No storage internals or audio URL are ever produced.
     expect(Object.keys(view)).not.toContain("musicMediaId");
@@ -42,13 +48,14 @@ describe("buildVisitorExperience", () => {
   });
 
   it("returns an honest empty view when the archive row is absent", () => {
-    const view = buildVisitorExperience(null, { introMediaId: null, photos: [] });
+    const view = buildVisitorExperience(null, { introMediaId: null, photos: [], videos: [] });
     expect(view).toEqual({
       title: "",
       narrative: "",
       musicEnabled: false,
       introMediaId: null,
       photos: [],
+      videos: [],
     });
   });
 });
