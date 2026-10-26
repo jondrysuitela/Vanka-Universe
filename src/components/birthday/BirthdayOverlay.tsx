@@ -50,13 +50,6 @@ export default function BirthdayOverlay({
       aria-label="Vanka Experience — ulang tahun Vanka"
       className="fixed inset-0 z-[150] overflow-y-auto"
     >
-      {/* Full-bleed night sky, so the dashboard behind is never half-visible. */}
-      <div aria-hidden="true" className="cosmos-sky fixed inset-0" />
-      <div aria-hidden="true" className="cosmos-aurora-a fixed -top-32 left-[8%] h-[55vmin] w-[55vmin]" />
-      <div aria-hidden="true" className="cosmos-aurora-b fixed right-[4%] top-[30%] h-[45vmin] w-[45vmin]" />
-      <div aria-hidden="true" className="cosmos-aurora-c fixed bottom-[-10%] left-[30%] h-[60vmin] w-[60vmin]" />
-      <div aria-hidden="true" className="cosmos-vignette fixed inset-0" />
-
       <div className="relative z-10">
         <BirthdayExperiencePlayer
           draftPreview={false}

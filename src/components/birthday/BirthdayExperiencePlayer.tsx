@@ -195,7 +195,22 @@ export default function BirthdayExperiencePlayer({
   const playbackStarted = musicStarted || autoStartMusic || (autoOpenGift && !autoOpenConsumed);
 
   return (
-    <div className={overlay ? "relative min-h-dvh w-full" : "relative min-h-dvh"}>
+    <div
+      className={
+        overlay
+          ? "fixed inset-0 z-[200] w-full overflow-y-auto bg-[#04060f]"
+          : "relative min-h-dvh"
+      }
+    >
+      {overlay && (
+        <>
+          <div aria-hidden="true" className="cosmos-sky fixed inset-0" />
+          <div aria-hidden="true" className="cosmos-aurora-a fixed -top-32 left-[8%] h-[55vmin] w-[55vmin]" />
+          <div aria-hidden="true" className="cosmos-aurora-b fixed right-[4%] top-[30%] h-[45vmin] w-[45vmin]" />
+          <div aria-hidden="true" className="cosmos-aurora-c fixed bottom-[-10%] left-[30%] h-[60vmin] w-[60vmin]" />
+          <div aria-hidden="true" className="cosmos-vignette fixed inset-0" />
+        </>
+      )}
       {overlay && onClose && (
         <button
           type="button"

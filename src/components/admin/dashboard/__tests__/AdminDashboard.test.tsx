@@ -37,16 +37,19 @@ vi.mock("@/components/birthday/BirthdayExperiencePlayer", () => ({
   default: ({
     autoStartMusic,
     autoOpenGift,
+    overlay,
     onClose,
   }: {
     autoStartMusic: boolean;
     autoOpenGift: boolean;
+    overlay: boolean;
     onClose: () => void;
   }) => (
     <div
       data-testid="birthday-experience-player"
       data-auto-start-music={String(autoStartMusic)}
       data-auto-open-gift={String(autoOpenGift)}
+      data-overlay={String(overlay)}
     >
       <button type="button" onClick={onClose}>
         Close experience
@@ -97,6 +100,9 @@ describe("AdminDashboard birthday preview", () => {
       "true",
     );
     expect(screen.getByTestId("birthday-experience-player").getAttribute("data-auto-open-gift")).toBe(
+      "true",
+    );
+    expect(screen.getByTestId("birthday-experience-player").getAttribute("data-overlay")).toBe(
       "true",
     );
   });
