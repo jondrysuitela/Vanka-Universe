@@ -46,6 +46,10 @@ export async function findMediaRecord(id: string): Promise<MediaRecord | null> {
   return getMediaStore().find(id);
 }
 
+export async function replaceMediaImage(id: string, file: File): Promise<MediaRecord | null> {
+  return getMediaStore().replaceImage(id, file);
+}
+
 export async function updateMediaMetadata(
   id: string,
   patch: MediaMetadataPatch,

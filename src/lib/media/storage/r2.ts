@@ -12,6 +12,7 @@ import {
 
 import { ApiError } from "@/lib/auth/guard";
 import type { SessionAdmin } from "@/lib/auth/session";
+import { readReplacementImage } from "@/lib/media/storage/replace-image";
 import { MIME_MAP, extensionForMime, sniffMime } from "@/lib/media/storage/mime";
 import type {
   MediaCollection,
@@ -384,6 +385,56 @@ export function createR2MediaStore(options: R2MediaOptions = {}): MediaStore {
     return records.find((row) => row.id === id) ?? null;
   }
 
+  async function replaceImage(id: string, file: File): Promise<MediaRecord | null> {
+    return withIndexLock(async () => {
+      const records = await readIndex();
+      const index = records.findIndex((record) => record.id === id);
+      if (index === -1) return null;
+
+      const record = records[index];
+      const bytes = await readReplacementImage(file, record);
+      const key = objectKeyFor(record.id, record.mime);
+      let previousResponse: { Body?: unknown };
+      try {
+        previousResponse = (await client.send(
+          new GetObjectCommand({ Bucket: bucket, Key: key }),
+        )) as { Body?: unknown };
+      } catch (error) {
+        if (isNotFound(error)) {
+          throw new R2IntegrityError("Foto asli tidak ditemukan di penyimpanan.");
+        }
+        throw error;
+      }
+      const previousBytes = await bodyToBuffer(previousResponse.Body);
+      if (!previousBytes) throw new R2IntegrityError("Foto asli tidak dapat dipulihkan.");
+
+      await client.send(
+        new PutObjectCommand({ Bucket: bucket, Key: key, Body: bytes, ContentType: record.mime }),
+      );
+      const updated = { ...record, size: bytes.byteLength };
+      const next = records.slice();
+      next[index] = updated;
+      try {
+        await writeIndex(next);
+      } catch (error) {
+        try {
+          await client.send(
+            new PutObjectCommand({
+              Bucket: bucket,
+              Key: key,
+              Body: previousBytes,
+              ContentType: record.mime,
+            }),
+          );
+        } catch {
+          throw new R2IntegrityError("Gagal memperbarui index dan memulihkan foto asli.");
+        }
+        throw error;
+      }
+      return updated;
+    });
+  }
+
   async function list(): Promise<MediaRecord[]> {
     return readIndex();
   }
@@ -439,5 +490,5 @@ export function createR2MediaStore(options: R2MediaOptions = {}): MediaStore {
     });
   }
 
-  return { list, save, read, find, updateMetadata, remove };
+  return { list, save, read, find, replaceImage, updateMetadata, remove };
 }

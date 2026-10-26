@@ -14,9 +14,12 @@ import {
   rowToRecord,
   selectReadyMediaObject,
   updateReadyMediaObjectMetadata,
+  updateReadyMediaObjectSize,
+  type MediaObjectRow,
   type MediaQueryable,
 } from "@/lib/media/db/repository";
 import { MediaMetadataIntegrityError } from "@/lib/media/db/errors";
+import { readReplacementImage } from "@/lib/media/storage/replace-image";
 import { MIME_MAP, extensionForMime, sniffMime } from "@/lib/media/storage/mime";
 import type { MediaObjectClient } from "@/lib/media/storage/object-client";
 import type {
@@ -189,6 +192,45 @@ export function createDbMediaStore(options: DbMediaStoreOptions): MediaStore {
     return { record: rowToRecord(row), data };
   }
 
+  async function replaceImage(id: string, file: File): Promise<MediaRecord | null> {
+    const row = await selectReadyMediaObject(pool, id);
+    if (!row) return null;
+
+    const record = rowToRecord(row);
+    const bytes = await readReplacementImage(file, record);
+    const previousBytes = await objects.get(row.storage_key);
+    if (!previousBytes) {
+      throw new MediaMetadataIntegrityError("Objek foto tidak ditemukan saat penggantian.");
+    }
+
+    await objects.put(row.storage_key, bytes, record.mime);
+    let updated: MediaObjectRow | null;
+    try {
+      updated = await updateReadyMediaObjectSize(pool, id, bytes.byteLength);
+    } catch (error) {
+      try {
+        await objects.put(row.storage_key, previousBytes, record.mime);
+      } catch {
+        throw new MediaMetadataIntegrityError(
+          "Gagal memperbarui ukuran metadata dan memulihkan foto asli.",
+        );
+      }
+      throw error;
+    }
+
+    if (!updated) {
+      try {
+        await objects.put(row.storage_key, previousBytes, record.mime);
+      } catch {
+        throw new MediaMetadataIntegrityError(
+          "Baris media hilang dan foto asli tidak dapat dipulihkan.",
+        );
+      }
+      return null;
+    }
+    return rowToRecord(updated);
+  }
+
   async function updateMetadata(
     id: string,
     patch: MediaMetadataPatch,
@@ -221,5 +263,5 @@ export function createDbMediaStore(options: DbMediaStoreOptions): MediaStore {
     return rowToRecord(row);
   }
 
-  return { list, save, read, find, updateMetadata, remove };
+  return { list, save, read, find, replaceImage, updateMetadata, remove };
 }

@@ -87,6 +87,7 @@ export interface MediaStore {
   ): Promise<MediaRecord>;
   read(id: string): Promise<MediaReadResult | null>;
   find(id: string): Promise<MediaRecord | null>;
+  replaceImage(id: string, file: File): Promise<MediaRecord | null>;
   updateMetadata(id: string, patch: MediaMetadataPatch): Promise<MediaRecord | null>;
   remove(id: string): Promise<MediaRecord | null>;
 }

@@ -23,6 +23,7 @@ function createMemoryPool() {
   const rows = new Map<string, Row>();
   let failMarkReady = false;
   let failDeleteRow = false;
+  let failUpdate = false;
 
   const pool: DbPool = {
     async query<T>(sql: string, params: unknown[] = []): Promise<{ rows: T[] }> {
@@ -83,6 +84,7 @@ function createMemoryPool() {
       }
 
       if (sql.includes("UPDATE media_objects")) {
+        if (failUpdate) throw new Error("update failed");
         const r = rows.get(String(params[params.length - 1]));
         if (!r || r.status !== "ready") return { rows: [] };
         for (const match of sql.matchAll(/(\w+) = \$(\d+)/g)) {
@@ -130,6 +132,9 @@ function createMemoryPool() {
     },
     setFailDeleteRow(value: boolean) {
       failDeleteRow = value;
+    },
+    setFailUpdate(value: boolean) {
+      failUpdate = value;
     },
   };
 }
@@ -323,6 +328,34 @@ describe("createDbMediaStore — read and metadata", () => {
     const updated = await store.updateMetadata(record.id, { title: "Hai", takenAt: "2020-01-01" });
     expect(updated).toMatchObject({ title: "Hai", takenAt: "2020-01-01" });
     expect(await store.find(record.id)).toMatchObject({ title: "Hai" });
+  });
+
+  it("replaces image bytes and updates the existing ready row size", async () => {
+    const { db, obj, store } = makeStore();
+    const record = await store.save(admin, pngFile());
+    const replacementBytes = Buffer.concat([PNG, Buffer.from([0x04, 0x05])]);
+
+    const updated = await store.replaceImage(
+      record.id,
+      new File([replacementBytes], record.name, { type: record.mime }),
+    );
+
+    expect(updated).toMatchObject({ id: record.id, size: replacementBytes.byteLength });
+    expect(db.rows.get(record.id)?.file_size).toBe(replacementBytes.byteLength);
+    expect(obj.map.get(`test/${record.id}.png`)).toEqual(replacementBytes);
+  });
+
+  it("restores original bytes when the ready-row size update fails", async () => {
+    const { db, obj, store } = makeStore();
+    const record = await store.save(admin, pngFile());
+    const originalBytes = obj.map.get(`test/${record.id}.png`);
+    const replacementBytes = Buffer.concat([PNG, Buffer.from([0x04, 0x05])]);
+    db.setFailUpdate(true);
+
+    await expect(
+      store.replaceImage(record.id, new File([replacementBytes], record.name, { type: record.mime })),
+    ).rejects.toThrow("update failed");
+    expect(obj.map.get(`test/${record.id}.png`)).toEqual(originalBytes);
   });
 });
 

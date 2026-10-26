@@ -1,5 +1,6 @@
 import { ApiError, assertSafeMutation, jsonError, jsonOk, requireRole, requireSession } from "@/lib/auth/guard";
 import { MEDIA_OPERATOR_ROLES } from "@/lib/media/policy";
+import { limitRequestBody } from "@/lib/media/request-body";
 import { checkMediaReferences } from "@/lib/media/references";
 // Side-effect: registers the private-archive gallery reference probe so DELETE
 // stays fail-closed for media used by Arsip Ibu (Tahap 4G.39D). Read-only.
@@ -14,7 +15,9 @@ import { describeMediaStoreError } from "@/lib/media/storage/error-mapping";
 import {
   deleteMedia,
   findMediaRecord,
+  MAX_REQUEST_BYTES,
   readMediaFile,
+  replaceMediaImage,
   updateMediaMetadata,
 } from "@/lib/media/store";
 
@@ -127,6 +130,60 @@ export async function PATCH(request: Request, ctx: RouteContext): Promise<Respon
     }
 
     const updated = await updateMediaMetadata(id, parsed.data);
+    if (!updated) return jsonError(404, "NOT_FOUND", "Media tidak ditemukan.");
+    return jsonOk(updated);
+  } catch (error) {
+    if (error instanceof ApiError) return error.toResponse();
+    const mediaError = describeMediaStoreError(error);
+    if (mediaError) return jsonError(mediaError.status, mediaError.code, mediaError.message);
+    return jsonError(500, "INTERNAL_ERROR", "Terjadi kesalahan pada server.");
+  }
+}
+
+/** PUT /api/media/[id] — replace image bytes while preserving its media ID. */
+export async function PUT(request: Request, ctx: RouteContext): Promise<Response> {
+  try {
+    const origin = request.headers.get("origin");
+    const url = new URL(request.url);
+    const expectedOrigin = process.env.APP_ORIGIN ?? url.origin;
+    if (!origin || origin !== expectedOrigin) {
+      throw new ApiError(403, "ORIGIN_REJECTED", "Origin tidak diizinkan.");
+    }
+    if (!(request.headers.get("content-type") ?? "").toLowerCase().includes("multipart/form-data")) {
+      throw new ApiError(403, "CONTENT_TYPE_REJECTED", "Content-Type harus multipart/form-data.");
+    }
+    if ((request.headers.get("x-vanka-request") ?? "").trim() !== "1") {
+      throw new ApiError(403, "CSRF_HEADER_REJECTED", "Header x-vanka-request wajib disertakan.");
+    }
+
+    const { admin } = await requireSession(request);
+    requireRole(admin, MEDIA_OPERATOR_ROLES);
+    const id = await resolveId(ctx);
+    const existing = await findMediaRecord(id);
+    if (!existing) return jsonError(404, "NOT_FOUND", "Media tidak ditemukan.");
+
+    const declaredLength = request.headers.get("content-length");
+    if (declaredLength !== null) {
+      const declared = Number(declaredLength);
+      if (Number.isFinite(declared) && declared > MAX_REQUEST_BYTES) {
+        return jsonError(413, "FILE_TOO_LARGE", "Ukuran unggahan terlalu besar.");
+      }
+    }
+
+    let form: FormData;
+    try {
+      form = await limitRequestBody(request, MAX_REQUEST_BYTES).formData();
+    } catch (error) {
+      if (error instanceof ApiError) return error.toResponse();
+      return jsonError(400, "INVALID_FORM", "Body bukan multipart/form-data yang valid.");
+    }
+
+    const file = form.get("file");
+    if (!(file instanceof File)) {
+      return jsonError(422, "NO_FILE", "Tidak ada hasil crop yang dikirim.");
+    }
+
+    const updated = await replaceMediaImage(id, file);
     if (!updated) return jsonError(404, "NOT_FOUND", "Media tidak ditemukan.");
     return jsonOk(updated);
   } catch (error) {

@@ -226,6 +226,23 @@ export async function updateReadyMediaObjectMetadata(
   return rows[0] ?? null;
 }
 
+/** Update the byte size on a READY row after its existing object was replaced. */
+export async function updateReadyMediaObjectSize(
+  pool: MediaQueryable,
+  id: string,
+  size: number,
+): Promise<MediaObjectRow | null> {
+  const rows = await guarded<MediaObjectRow>(
+    pool,
+    `UPDATE media_objects
+        SET file_size = $1, updated_at = now()
+      WHERE id = $2 AND status = 'ready'
+      RETURNING ${RETURN_COLUMNS}`,
+    [size, id],
+  );
+  return rows[0] ?? null;
+}
+
 /** Delete a row (any status), returning it, or null when absent. */
 export async function deleteMediaObjectRow(
   pool: MediaQueryable,

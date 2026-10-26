@@ -11,6 +11,7 @@ import {
   selectAnyMediaObject,
   selectReadyMediaObject,
   updateReadyMediaObjectMetadata,
+  updateReadyMediaObjectSize,
   type MediaObjectRow,
 } from "@/lib/media/db/repository";
 import { MediaObjectsUnavailableError } from "@/lib/media/db/errors";
@@ -176,6 +177,20 @@ describe("updateReadyMediaObjectMetadata", () => {
     const result = await updateReadyMediaObjectMetadata(fake.pool, row.id, {});
     expect(result).toMatchObject({ id: row.id });
     expect(fake.query.mock.calls[0][0]).toContain("SELECT");
+  });
+});
+
+describe("updateReadyMediaObjectSize", () => {
+  it("updates only the size of a ready row", async () => {
+    fake.when("UPDATE media_objects", () =>
+      rowsResult([{ ...row, status: "ready", file_size: 42 }]),
+    );
+    const updated = await updateReadyMediaObjectSize(fake.pool, row.id, 42);
+    expect(updated).toMatchObject({ file_size: 42 });
+    const [sql, params] = fake.query.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("file_size = $1");
+    expect(sql).toContain("status = 'ready'");
+    expect(params).toEqual([42, row.id]);
   });
 });
 

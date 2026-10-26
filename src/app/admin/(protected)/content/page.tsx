@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/admin/ui/ToastProvider";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
+import ScrapbookImageCropper from "@/components/admin/media/ScrapbookImageCropper";
 
 /**
  * Editor Konten — edit/hapus media yang sudah diunggah.
  *
  * Reads the REAL media store via `/api/media` (private, session-gated). No mock
- * data and no "add content" form (upload stays in Pustaka Media). Edit sends
- * PATCH and delete sends DELETE with the CSRF headers the API requires.
+ * data and no "add content" form (upload stays in Pustaka Media). Metadata and
+ * cropped image edits preserve the media record; deletion remains reference-guarded.
  *
  * Media can only be deleted when nothing references it; the API returns 409
  * otherwise and that is surfaced honestly.
@@ -62,6 +63,10 @@ export default function AdminContentPage() {
   const [deleting, setDeleting] = useState<SavedMedia | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [cropItem, setCropItem] = useState<SavedMedia | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [cropLoadingId, setCropLoadingId] = useState<string | null>(null);
+  const [cropError, setCropError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -87,6 +92,50 @@ export default function AdminContentPage() {
     setEditDescription(item.description ?? "");
     setEditTakenAt(item.takenAt ?? "");
     setEditError(null);
+  }
+
+  async function openCrop(item: SavedMedia) {
+    if (cropLoadingId) return;
+    setCropLoadingId(item.id);
+    setCropError(null);
+    try {
+      const response = await fetch(`/api/media/${item.id}`);
+      if (!response.ok) throw new Error("Foto asli gagal dimuat dari penyimpanan.");
+      const source = await response.blob();
+      setCropFile(new File([source], item.name, { type: item.mime }));
+      setCropItem(item);
+    } catch (error) {
+      setCropError(error instanceof Error ? error.message : "Foto gagal dimuat.");
+    } finally {
+      setCropLoadingId(null);
+    }
+  }
+
+  async function replaceCroppedImage(cropped: File) {
+    if (!cropItem) return;
+    const form = new FormData();
+    form.append("file", cropped, cropItem.name);
+    const response = await fetch(`/api/media/${cropItem.id}`, {
+      method: "PUT",
+      headers: { "x-vanka-request": "1" },
+      body: form,
+    });
+    const body = (await response.json().catch(() => null)) as
+      | { data?: SavedMedia; error?: { message?: string } }
+      | null;
+    if (!response.ok || !body?.data) {
+      throw new Error(body?.error?.message ?? "Gagal mengganti foto dengan hasil crop.");
+    }
+
+    const updated = body.data;
+    setItems((previous) => previous.map((media) => (media.id === updated.id ? updated : media)));
+    setCropFile(null);
+    setCropItem(null);
+    showToast({
+      title: "Foto berhasil di-crop",
+      message: "File lama diganti. Semua galeri dan thumbnail yang memakai foto ini ikut diperbarui.",
+      type: "success",
+    });
   }
 
   async function saveEdit() {
@@ -156,7 +205,7 @@ export default function AdminContentPage() {
       <div>
         <h1 className="text-3xl font-display tracking-widest text-[#fdf3d8]">Editor Konten</h1>
         <p className="text-sm text-[#fdf3d8]/70 mt-2">
-          Media terunggah dari Pustaka Media. Halaman ini tidak menambah konten baru — hanya mengubah metadata dan menghapus.
+          Media terunggah dari Pustaka Media. Crop foto di sini mengganti file lama dan memperbarui semua pemakaiannya.
         </p>
       </div>
 
@@ -214,7 +263,18 @@ export default function AdminContentPage() {
                 {item.description && (
                   <p className="text-xs text-[#fdf3d8]/70 whitespace-pre-wrap">{item.description}</p>
                 )}
-                <div className="flex gap-2 pt-1">
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {item.kind === "image" && ["image/jpeg", "image/png", "image/webp"].includes(item.mime) && (
+                    <button
+                      type="button"
+                      onClick={() => void openCrop(item)}
+                      disabled={cropLoadingId !== null}
+                      title="Mengganti foto ini akan memperbarui semua galeri dan thumbnail yang memakainya."
+                      className="rounded-lg border border-[#e9c67c]/40 px-4 py-2 text-xs text-[#f6e3b2] hover:bg-[#e9c67c]/10 transition-colors disabled:opacity-50"
+                    >
+                      {cropLoadingId === item.id ? "Memuat foto…" : "Crop & ganti"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => openEdit(item)}
@@ -310,6 +370,26 @@ export default function AdminContentPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {cropError && (
+        <p role="alert" className="rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {cropError}
+        </p>
+      )}
+
+      {cropItem && cropFile && (
+        <ScrapbookImageCropper
+          file={cropFile}
+          onCancel={() => {
+            setCropItem(null);
+            setCropFile(null);
+          }}
+          onApply={replaceCroppedImage}
+          description="Hasil crop akan menggantikan file ini. Semua galeri dan thumbnail yang menggunakannya ikut berubah."
+          applyLabel="Crop & ganti semua pemakaian"
+          processingLabel="Menyimpan hasil crop…"
+        />
       )}
 
       <ConfirmDialog

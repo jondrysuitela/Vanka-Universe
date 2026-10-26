@@ -269,6 +269,37 @@ describe("createR2MediaStore", () => {
     expect(await store.find(record.id)).toMatchObject({ title: "Hai" });
   });
 
+  it("replaces image bytes without changing the media id", async () => {
+    const fake = createFake();
+    const store = createR2MediaStore({ client: fake.client, config: makeConfig() });
+    const record = await store.save(admin, pngFile());
+    const replacementBytes = Buffer.concat([PNG, Buffer.from([0x04, 0x05])]);
+
+    const updated = await store.replaceImage(
+      record.id,
+      new File([replacementBytes], record.name, { type: record.mime }),
+    );
+    const stored = await store.read(record.id);
+
+    expect(updated).toMatchObject({ id: record.id, size: replacementBytes.byteLength });
+    expect(stored?.data).toEqual(replacementBytes);
+  });
+
+  it("restores the original image when the index cannot be updated", async () => {
+    const fake = createFake();
+    const store = createR2MediaStore({ client: fake.client, config: makeConfig() });
+    const record = await store.save(admin, pngFile());
+    const replacementBytes = Buffer.concat([PNG, Buffer.from([0x04, 0x05])]);
+    fake.setFailPut((key) =>
+      key === INDEX_KEY ? Object.assign(new Error("index write failed"), { name: "InternalError" }) : null,
+    );
+
+    await expect(
+      store.replaceImage(record.id, new File([replacementBytes], record.name, { type: record.mime })),
+    ).rejects.toThrow("index write failed");
+    expect((await store.read(record.id))?.data).toEqual(PNG);
+  });
+
   it("deletes the index entry and the object", async () => {
     const fake = createFake();
     const store = createR2MediaStore({ client: fake.client, config: makeConfig() });

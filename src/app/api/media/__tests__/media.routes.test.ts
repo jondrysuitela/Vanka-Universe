@@ -17,6 +17,7 @@ vi.mock("@/lib/media/store", () => ({
   listMedia: vi.fn(),
   saveMediaUpload: vi.fn(),
   readMediaFile: vi.fn(),
+  replaceMediaImage: vi.fn(),
   findMediaRecord: vi.fn(),
   updateMediaMetadata: vi.fn(),
   deleteMedia: vi.fn(),
@@ -30,7 +31,12 @@ vi.mock("@/lib/media/references", () => ({
 }));
 
 import { GET as listGet, POST as listPost } from "@/app/api/media/route";
-import { DELETE as detailDelete, GET as detailGet, PATCH as detailPatch } from "@/app/api/media/[id]/route";
+import {
+  DELETE as detailDelete,
+  GET as detailGet,
+  PATCH as detailPatch,
+  PUT as detailPut,
+} from "@/app/api/media/[id]/route";
 import { checkMediaReferences } from "@/lib/media/references";
 import {
   MAX_REQUEST_BYTES,
@@ -38,6 +44,7 @@ import {
   findMediaRecord,
   listMedia,
   readMediaFile,
+  replaceMediaImage,
   saveMediaUpload,
   updateMediaMetadata,
 } from "@/lib/media/store";
@@ -260,6 +267,55 @@ describe("PATCH /api/media/[id] (edit metadata)", () => {
       title: "Pantai",
       takenAt: "2026-01-02",
     });
+  });
+});
+
+describe("PUT /api/media/[id] (replace image)", () => {
+  it("requires an authenticated media operator", async () => {
+    setupSession(fake, false);
+    const res = await detailPut(
+      new Request(`${BASE}/api/media/${VALID_UUID}`, {
+        method: "PUT",
+        headers: uploadHeaders(COOKIE),
+        body: uploadBody(),
+      }),
+      { params: Promise.resolve({ id: VALID_UUID }) },
+    );
+    expect(res.status).toBe(401);
+    expect(vi.mocked(replaceMediaImage)).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing multipart CSRF header", async () => {
+    setupSession(fake, true);
+    const res = await detailPut(
+      new Request(`${BASE}/api/media/${VALID_UUID}`, {
+        method: "PUT",
+        headers: new Headers({ origin: BASE }),
+        body: uploadBody(),
+      }),
+      { params: Promise.resolve({ id: VALID_UUID }) },
+    );
+    expect(res.status).toBe(403);
+    expect(vi.mocked(replaceMediaImage)).not.toHaveBeenCalled();
+  });
+
+  it("replaces the bytes for the existing media id", async () => {
+    setupSession(fake, true);
+    vi.mocked(findMediaRecord).mockResolvedValue(mediaRecord() as never);
+    vi.mocked(replaceMediaImage).mockResolvedValue(mediaRecord({ size: 4 }) as never);
+
+    const res = await detailPut(
+      new Request(`${BASE}/api/media/${VALID_UUID}`, {
+        method: "PUT",
+        headers: uploadHeaders(COOKIE),
+        body: uploadBody(),
+      }),
+      { params: Promise.resolve({ id: VALID_UUID }) },
+    );
+
+    expect(res.status).toBe(200);
+    expect((await json(res)).data).toMatchObject({ id: VALID_UUID, size: 4 });
+    expect(replaceMediaImage).toHaveBeenCalledWith(VALID_UUID, expect.any(File));
   });
 });
 

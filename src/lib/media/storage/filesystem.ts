@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { ApiError } from "@/lib/auth/guard";
 import type { SessionAdmin } from "@/lib/auth/session";
+import { readReplacementImage } from "@/lib/media/storage/replace-image";
 import { MIME_MAP, sniffMime } from "@/lib/media/storage/mime";
 import type {
   MediaCollection,
@@ -211,6 +212,47 @@ async function find(id: string): Promise<MediaRecord | null> {
   return records.find((r) => r.id === id) ?? null;
 }
 
+async function replaceImage(id: string, file: File): Promise<MediaRecord | null> {
+  return withIndexLock(async () => {
+    const records = await readIndex();
+    const index = records.findIndex((record) => record.id === id);
+    if (index === -1) return null;
+
+    const record = records[index];
+    const bytes = await readReplacementImage(file, record);
+    const filePath = storedFilePath(record);
+    if (!filePath) throw new Error("Path media asli tidak valid.");
+    const previousBytes = await readFile(filePath);
+    const tempFile = `${filePath}.${randomUUID()}.tmp`;
+
+    try {
+      await writeFile(tempFile, bytes);
+      await rename(tempFile, filePath);
+    } catch (error) {
+      await unlink(tempFile).catch(() => {});
+      throw error;
+    }
+
+    const updated = { ...record, size: bytes.byteLength };
+    const next = records.slice();
+    next[index] = updated;
+    try {
+      await writeIndex(next);
+    } catch (error) {
+      const rollbackFile = `${filePath}.${randomUUID()}.tmp`;
+      try {
+        await writeFile(rollbackFile, previousBytes);
+        await rename(rollbackFile, filePath);
+      } catch {
+        await unlink(rollbackFile).catch(() => {});
+        throw new Error("Gagal memperbarui index dan memulihkan foto asli.");
+      }
+      throw error;
+    }
+    return updated;
+  });
+}
+
 async function updateMetadata(
   id: string,
   patch: MediaMetadataPatch,
@@ -275,6 +317,7 @@ export const filesystemMediaStore: MediaStore = {
   save,
   read,
   find,
+  replaceImage,
   updateMetadata,
   remove,
 };

@@ -18,10 +18,16 @@ export default function ScrapbookImageCropper({
   file,
   onCancel,
   onApply,
+  description = "Geser foto agar wajah masuk area portrait 4:5. Gunakan zoom untuk mengatur komposisi.",
+  applyLabel = "Gunakan crop 4:5",
+  processingLabel = "Memproses…",
 }: {
   file: File;
   onCancel: () => void;
-  onApply: (cropped: File) => void;
+  onApply: (cropped: File) => void | Promise<void>;
+  description?: string;
+  applyLabel?: string;
+  processingLabel?: string;
 }) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{
@@ -107,7 +113,7 @@ export default function ScrapbookImageCropper({
     setProcessing(true);
     setError(null);
     try {
-      onApply(await createScrapbookCrop(file, position));
+      await onApply(await createScrapbookCrop(file, position));
     } catch (cropError) {
       setError(
         cropError instanceof Error
@@ -131,7 +137,7 @@ export default function ScrapbookImageCropper({
             Sesuaikan foto scrapbook
           </h2>
           <p className="mt-1 text-sm text-[#fdf3d8]/65">
-            Geser foto agar wajah masuk area portrait 4:5. Gunakan zoom untuk mengatur komposisi.
+            {description}
           </p>
         </div>
 
@@ -243,7 +249,7 @@ export default function ScrapbookImageCropper({
             disabled={!dimensions || processing}
             className="rounded-lg bg-gradient-to-r from-[#f6d77a] to-[#fdf3d8] px-5 py-2.5 text-sm font-semibold text-[#050814] disabled:opacity-50"
           >
-            {processing ? "Memproses…" : "Gunakan crop 4:5"}
+            {processing ? processingLabel : applyLabel}
           </button>
         </div>
       </div>

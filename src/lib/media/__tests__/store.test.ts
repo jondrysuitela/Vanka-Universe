@@ -115,6 +115,46 @@ describe("media store (isolated)", () => {
     expect(found?.data.subarray(0, 8)).toEqual(pngBytes().subarray(0, 8));
   });
 
+  it("replaces image bytes while preserving the media id and metadata", async () => {
+    const store = await loadStore();
+    const record = await store.saveMediaUpload(
+      admin,
+      new File([pngBytes()], "foto.png", { type: "image/png" }),
+      "birthday",
+      { title: "Kenangan", description: "Foto lama" },
+    );
+    const replacementBytes = pngBytes(128);
+
+    const updated = await store.replaceMediaImage(
+      record.id,
+      new File([replacementBytes], "foto.png", { type: "image/png" }),
+    );
+    const stored = await store.readMediaFile(record.id);
+
+    expect(updated).toMatchObject({
+      id: record.id,
+      name: record.name,
+      title: "Kenangan",
+      description: "Foto lama",
+      size: replacementBytes.byteLength,
+    });
+    expect(stored?.data).toEqual(replacementBytes);
+  });
+
+  it("rejects a replacement whose image format differs from the original", async () => {
+    const store = await loadStore();
+    const record = await store.saveMediaUpload(
+      admin,
+      new File([pngBytes()], "foto.png", { type: "image/png" }),
+    );
+    const jpegBytes = Buffer.from([0xff, 0xd8, 0xff, 0x01]);
+
+    await expect(
+      store.replaceMediaImage(record.id, new File([jpegBytes], "foto.jpg", { type: "image/jpeg" })),
+    ).rejects.toMatchObject({ status: 422, code: "IMAGE_TYPE_MISMATCH" });
+    expect((await store.readMediaFile(record.id))?.data).toEqual(pngBytes());
+  });
+
   it("rejects an unsupported type (415)", async () => {
     const store = await loadStore();
     await expect(
