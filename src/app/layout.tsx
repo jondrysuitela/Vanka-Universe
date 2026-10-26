@@ -30,12 +30,26 @@ const dancingScript = Dancing_Script({
 
 const siteUrl = "https://vanka-universe.online";
 const ogImage = `${siteUrl}/og-vanka-universe.jpg`;
+const facebookAppId = "1693325248883353";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
+
   title: "Vanka Universe",
   description: "A Universe of Memories. A Lifetime of Love.",
-  keywords: ["Vanka", "memories", "birthday", "universe", "archive"],
+
+  keywords: [
+    "Vanka",
+    "memories",
+    "birthday",
+    "universe",
+    "archive",
+  ],
+
+  alternates: {
+    canonical: "/",
+  },
+
   openGraph: {
     type: "website",
     url: siteUrl,
@@ -51,6 +65,7 @@ export const metadata: Metadata = {
       },
     ],
   },
+
   twitter: {
     card: "summary_large_image",
     title: "Vanka Universe",
@@ -61,15 +76,24 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <html
       lang="en"
       className={`${inter.variable} ${playfair.variable} ${cinzel.variable} ${dancingScript.variable} h-full antialiased`}
     >
-      <body className="cosmos-body min-h-full font-sans">{children}</body>
+      <head>
+        <meta
+          property="fb:app_id"
+          content={facebookAppId}
+        />
+      </head>
+
+      <body className="cosmos-body min-h-full font-sans">
+        {children}
+      </body>
     </html>
   );
 }
