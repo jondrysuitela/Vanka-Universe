@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/admin/ui/ToastProvider";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
+import BirthdayCountdown from "@/components/birthday/BirthdayCountdown";
+import BirthdayExperiencePlayer from "@/components/birthday/BirthdayExperiencePlayer";
 import {
   DEFAULT_LETTER_DRAFT,
   DEFAULT_LETTER_THUMBNAIL,
@@ -18,6 +20,7 @@ import {
 } from "@/components/birthday/LetterScene";
 import { BIRTHDAY_THEMES, getThemeByAge } from "@/lib/birthday/theme-registry";
 import { isCycleRevealed } from "@/lib/birthday/cycle";
+import { BIRTHDAY_COUNTDOWN_SECONDS } from "@/lib/birthday/countdown";
 import {
   loadLetters,
   reconcileLetter,
@@ -80,11 +83,34 @@ export default function AdminBirthdayPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [addAge, setAddAge] = useState(1);
   const [openDelete, setOpenDelete] = useState(false);
+  const [birthdayPreview, setBirthdayPreview] = useState<{
+    age: number;
+    revealAt: number;
+    now: number;
+    phase: "countdown" | "celebration" | "experience";
+  } | null>(null);
+  const countdownPreviewOpen = birthdayPreview !== null && birthdayPreview.phase !== "experience";
 
   // Server view (read-only) + explicit-save state. Local drafts are untouched.
   const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
   const [serverLetters, setServerLetters] = useState<Map<number, ServerLetter>>(new Map());
   const [savingToServer, setSavingToServer] = useState(false);
+
+  useEffect(() => {
+    if (!countdownPreviewOpen) return;
+    const timer = window.setInterval(() => {
+      setBirthdayPreview((preview) =>
+        preview === null || preview.phase === "experience"
+          ? preview
+          : {
+              ...preview,
+              now: Date.now(),
+              phase: Date.now() >= preview.revealAt ? "celebration" : preview.phase,
+            },
+      );
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [countdownPreviewOpen]);
 
   // Published-by-date: an edition whose birthday has passed is FROZEN — the
   // server refuses further writes — so the editor must not offer a save that can
@@ -280,19 +306,17 @@ export default function AdminBirthdayPage() {
     router.push(`/birthday-experience?preview=1&letter=1&age=${selectedAge}`);
   }
 
-  /**
-   * Preview the WHOLE experience for this edition from its very beginning: the
-   * gift box → the opening frame (this edition's chosen thumbnail) → the letter
-   * → the memory box. The local draft is saved first so the preview shows exactly
-   * what is in the editor (same rule as "Preview Surat"). `full=1` is what makes
-   * the page load the edited draft instead of the bundled default — without it
-   * the opening frame falls back to the honest placeholder.
-   */
   function previewExperience() {
     if (selectedAge == null) return;
     saveLetterForAge(selectedAge, currentDraft());
     setSavedAges(listSavedLetterAges());
-    router.push(`/birthday-experience?preview=1&full=1&age=${selectedAge}`);
+    const now = Date.now();
+    setBirthdayPreview({
+      age: selectedAge,
+      now,
+      revealAt: now + BIRTHDAY_COUNTDOWN_SECONDS * 1000,
+      phase: "countdown",
+    });
   }
 
   function updateSection(id: string, patch: Partial<LetterSection>) {
@@ -523,7 +547,7 @@ export default function AdminBirthdayPage() {
                   onClick={previewExperience}
                   className="rounded-lg border border-[#f6d77a]/40 px-6 py-2.5 text-sm text-[#f6d77a] hover:bg-[#f6d77a]/10 transition-colors"
                 >
-                  Preview Pengalaman
+                  Preview Countdown + Experience
                 </button>
                 <button
                   type="button"
@@ -692,6 +716,34 @@ export default function AdminBirthdayPage() {
         onConfirm={confirmDelete}
         onCancel={() => setOpenDelete(false)}
       />
+      {birthdayPreview && (
+        <>
+          <div className={birthdayPreview.phase === "experience" ? "" : "hidden"}>
+            <BirthdayExperiencePlayer
+              draftPreview
+              draftAge={birthdayPreview.age}
+              editionAge={null}
+              editionYear={null}
+              overlay
+              autoStartMusic={birthdayPreview.phase !== "countdown"}
+              autoOpenGift={birthdayPreview.phase === "experience"}
+              onClose={() => setBirthdayPreview(null)}
+            />
+          </div>
+          {birthdayPreview.phase !== "experience" && (
+            <BirthdayCountdown
+              revealAt={birthdayPreview.revealAt}
+              now={birthdayPreview.now}
+              onClose={() => setBirthdayPreview(null)}
+              onOpenGift={() =>
+                setBirthdayPreview((preview) =>
+                  preview ? { ...preview, phase: "experience" } : null,
+                )
+              }
+            />
+          )}
+        </>
+      )}
     </div>
   );
 }
