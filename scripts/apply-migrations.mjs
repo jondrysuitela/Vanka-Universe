@@ -10,7 +10,7 @@
  * Usage:
  *   DATABASE_URL='postgres://...' node scripts/apply-migrations.mjs
  *   DATABASE_URL='postgres://...' node scripts/apply-migrations.mjs --to 4g27
- *   DATABASE_URL='postgres://...' node scripts/apply-migrations.mjs --from 4g39 --to 4g41
+ *   DATABASE_URL='postgres://...' node scripts/apply-migrations.mjs --from 4g39 --to 4g46
  *   node scripts/apply-migrations.mjs --list
  *
  * Behaviour:
@@ -40,6 +40,7 @@ const CHAIN = [
   { key: "4g39", file: "draft_migration_4g39_archive_gallery.sql" },
   { key: "4g40d3b", file: "draft_migration_4g40d3b_media_objects.sql" },
   { key: "4g41", file: "draft_migration_4g41_archive_access.sql" },
+  { key: "4g46", file: "draft_migration_4g46_birthday_music.sql" },
 ];
 
 const args = process.argv.slice(2);

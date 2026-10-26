@@ -204,6 +204,7 @@ export default function BirthdayExperiencePlayer({
           age={editionAge ?? draftAge}
           editionYear={editionYear ?? birthdayYear(editionAge ?? draftAge)}
           started={musicStarted}
+          adminPreview={draftPreview}
           overlay={overlay}
         />
       )}

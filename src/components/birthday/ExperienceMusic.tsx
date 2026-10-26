@@ -41,12 +41,15 @@ export default function ExperienceMusic({
   editionYear,
   /** The gift box has been opened by a click — the gesture that permits audio. */
   started,
+  /** Admin draft preview can play an unpublished candidate through the admin media route. */
+  adminPreview = false,
   /** Overlay mode sits above the page; the control is placed to suit it. */
   overlay = false,
 }: {
   age: number;
   editionYear: number;
   started: boolean;
+  adminPreview?: boolean;
   overlay?: boolean;
 }) {
   const reduce = useReducedMotion();
@@ -59,6 +62,7 @@ export default function ExperienceMusic({
   const [trackVolume, setTrackVolume] = useState<number | null>(null);
   /** True only after the audio element reports it can actually play. */
   const [available, setAvailable] = useState(false);
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
 
   // --- remember the visitor's choice ---------------------------------------
   // Read one frame in, like the draft reads elsewhere in the player: the value
@@ -77,33 +81,62 @@ export default function ExperienceMusic({
 
   // --- resolve which file this edition uses --------------------------------
   // Order of preference:
-  //   1. a PUBLISHED song uploaded through the admin (per-edition, in the DB);
+  //   1. a song uploaded through the admin (candidates in admin preview,
+  //      published songs in the public experience);
   //   2. the bundled file `public/music/vanka-<age>.mp3`;
   //   3. the shared bundled fallback.
-  // Step 1 is date-gated by the same rule as the letter and gallery, so an
-  // unpublished or not-yet-revealed song is simply not offered.
+  // The admin preview deliberately uses the session-gated admin endpoints;
+  // public visitors only receive published songs through the date-gated route.
   useEffect(() => {
     let active = true;
     const own = `/music/vanka-${age}.mp3`;
-    const resetFrame = requestAnimationFrame(() => {
-      setTrack(null);
-      setTrackVolume(null);
-      setAvailable(false);
+    let resetFrame = 0;
+    const resetComplete = new Promise<void>((resolve) => {
+      resetFrame = requestAnimationFrame(() => {
+        setTrack(null);
+        setTrackVolume(null);
+        setAvailable(false);
+        resolve();
+      });
     });
 
     void (async () => {
+      await resetComplete;
+      if (!active) return;
+
       let publishedId: string | null = null;
       let publishedVolume: number | null = null;
       try {
-        const res = await fetch(`/api/birthday/music?year=${editionYear}`, {
-          headers: { accept: "application/json" },
-        });
+        const res = await fetch(
+          adminPreview ? "/api/admin/birthday/music" : `/api/birthday/music?year=${editionYear}`,
+          {
+            headers: { accept: "application/json" },
+            cache: "no-store",
+          },
+        );
         if (res.ok) {
           const body = (await res.json()) as {
-            data?: { music?: { mediaId: string | null; volume: number | null } | null };
+            data?: {
+              music?:
+                | { mediaId: string | null; volume: number | null }
+                | Array<{
+                    year: number;
+                    mediaId: string | null;
+                    volume: number | null;
+                  }>
+                | null;
+            };
           };
-          publishedId = body?.data?.music?.mediaId ?? null;
-          const volume = body?.data?.music?.volume;
+          const music = body?.data?.music;
+          const editionMusic = adminPreview
+            ? Array.isArray(music)
+              ? music.find((entry) => entry.year === editionYear) ?? null
+              : null
+            : !Array.isArray(music)
+              ? music
+              : null;
+          publishedId = editionMusic?.mediaId ?? null;
+          const volume = editionMusic?.volume;
           publishedVolume =
             typeof volume === "number" && Number.isFinite(volume)
               ? Math.min(1, Math.max(0, volume))
@@ -116,9 +149,9 @@ export default function ExperienceMusic({
       setTrackVolume(publishedVolume);
 
       if (publishedId) {
-        // Uploaded music streams through its OWN date-gated byte route (a song
-        // is not a gallery memory and must not use the gallery's route).
-        setTrack(musicMediaUrl(publishedId));
+        // Admin drafts use the session-gated media proxy. Public music streams
+        // through its own date-gated route, never through the gallery route.
+        setTrack(adminPreview ? `/api/media/${publishedId}` : musicMediaUrl(publishedId));
         return;
       }
 
@@ -137,7 +170,7 @@ export default function ExperienceMusic({
       active = false;
       cancelAnimationFrame(resetFrame);
     };
-  }, [age, editionYear]);
+  }, [age, editionYear, adminPreview]);
 
   const playbackVolume = trackVolume ?? MUSIC_VOLUME;
 
@@ -201,9 +234,10 @@ export default function ExperienceMusic({
     const attempt = audio.play();
     if (attempt && typeof attempt.catch === "function") {
       attempt.catch(() => {
-        // Blocked (no gesture yet, or the browser is strict). Stay silent; the
-        // toggle still lets the visitor start it deliberately.
+        // If the async track lookup outlives the browser's gesture window, offer
+        // a deliberate play button instead of silently leaving preview muted.
         setAvailable(false);
+        setPlaybackBlocked(true);
       });
     }
     if (!reduce) fadeTo(playbackVolume, MUSIC_FADE_IN_MS);
@@ -251,6 +285,22 @@ export default function ExperienceMusic({
     }
   }
 
+  function startPlaybackFromGesture() {
+    const audio = audioRef.current;
+    if (!audio || track === null) return;
+    setMuted(false);
+    setPlaybackBlocked(false);
+    audio.volume = reduce ? playbackVolume : 0;
+    const attempt = audio.play();
+    if (attempt && typeof attempt.catch === "function") {
+      attempt.catch(() => {
+        setAvailable(false);
+        setPlaybackBlocked(true);
+      });
+    }
+    if (!reduce) fadeTo(playbackVolume, MUSIC_FADE_IN_MS);
+  }
+
   return (
     <>
       {track !== null && (
@@ -258,16 +308,36 @@ export default function ExperienceMusic({
           ref={audioRef}
           src={track}
           loop
-          preload="none"
+          preload="auto"
           // `playing` (not `canplay`) is the honest signal: the toggle must only
           // offer "mute" once sound is actually coming out.
-          onPlaying={() => setAvailable(true)}
-          onError={() => setAvailable(false)}
+          onPlaying={() => {
+            setAvailable(true);
+            setPlaybackBlocked(false);
+          }}
+          onError={() => {
+            setAvailable(false);
+            setPlaybackBlocked(false);
+          }}
         />
       )}
 
+      {started && track !== null && playbackBlocked && (
+        <button
+          type="button"
+          onClick={startPlaybackFromGesture}
+          aria-label="Putar musik"
+          className={`absolute z-40 inline-flex items-center gap-2 rounded-full border border-[#e9c67c]/50 bg-[#0b1226]/90 px-4 py-2 font-sans text-xs font-semibold uppercase tracking-[0.16em] text-[#f6e3b2] shadow-lg backdrop-blur-md transition duration-300 hover:border-[#e9c67c] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e9c67c] ${
+            overlay ? "right-20 top-5" : "right-4 top-5"
+          }`}
+        >
+          <SpeakerGlyph />
+          Putar musik
+        </button>
+      )}
+
       {/* Only offered once a real track is playing — no dead button. */}
-      {available && (
+      {available && !playbackBlocked && (
         <button
           type="button"
           onClick={toggleMuted}

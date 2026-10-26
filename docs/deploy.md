@@ -41,6 +41,7 @@ db/draft_migration_4g27_private_archive.sql    (private_archives)
 db/draft_migration_4g39_archive_gallery.sql    (private_archive_media)
 db/draft_migration_4g40d3b_media_objects.sql   (media_objects)
 db/draft_migration_4g41_archive_access.sql     (archive_access_sessions, archive_access_attempts)
+db/draft_migration_4g46_birthday_music.sql     (birthday_music + audio/music media support)
 ```
 
 Each draft runs in a single transaction and fails closed via its own
@@ -70,7 +71,14 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/draft_migrati
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/draft_migration_4g39_archive_gallery.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/draft_migration_4g40d3b_media_objects.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/draft_migration_4g41_archive_access.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f db/draft_migration_4g46_birthday_music.sql
 ```
+
+The `4g46` migration is required for birthday music uploads: it creates
+`birthday_music` and extends `media_objects` to accept the `audio` kind and
+`music` collection. Apply it to the production database before uploading a
+song. It is additive and safe to re-run, but take a Neon branch/snapshot first
+as with the other draft migrations.
 
 No `psql` locally? Paste each file into the Neon SQL editor, one at a time, in
 the same order. Take a Neon branch/snapshot first if the database already has
