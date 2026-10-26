@@ -77,11 +77,13 @@ describe("ExperienceScene memory gallery", () => {
     expect(screen.getByTestId("memory-scrapbook-stage").className).toContain("max-w-2xl");
     expect(screen.getByTestId("memory-scrapbook-stage").className).not.toContain("bg-gradient");
     expect(screen.getByTestId("memory-scrapbook-photo").className).toContain("border-[8px]");
-    expect(screen.getByTestId("memory-scrapbook-photo").className).toContain("w-[76%]");
-    expect(screen.getByAltText("Foto pertama").className).toContain("object-contain");
-    expect(screen.getByAltText("Foto pertama").parentElement?.className).toContain(
-      "will-change-transform",
-    );
+    expect(screen.getByTestId("memory-scrapbook-photo").className).toContain("w-[62%]");
+    expect(screen.getAllByTestId("memory-scrapbook-print")).toHaveLength(3);
+    const firstPhoto = screen.getByAltText("Foto pertama");
+    expect(firstPhoto.className).toContain("object-contain");
+    expect(firstPhoto.className).toContain("memory-photo-ken-burns");
+    expect(firstPhoto.parentElement?.tagName).toBe("FIGURE");
+    expect(Number.parseFloat(firstPhoto.style.getPropertyValue("--ken-burns-scale"))).toBeGreaterThan(1);
     act(() => {
       vi.advanceTimersByTime(10_000);
     });
@@ -89,6 +91,12 @@ describe("ExperienceScene memory gallery", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Foto atau video berikutnya" }));
     expect(screen.getByText("Foto kedua")).toBeTruthy();
+    const secondPhoto = screen.getByAltText("Foto kedua");
+    expect(secondPhoto.className).toContain("memory-photo-ken-burns");
+    expect(Number.parseFloat(secondPhoto.style.getPropertyValue("--ken-burns-scale"))).toBeGreaterThan(1);
+    expect(secondPhoto.style.getPropertyValue("--ken-burns-scale")).not.toBe(
+      firstPhoto.style.getPropertyValue("--ken-burns-scale"),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Foto atau video sebelumnya" }));
     expect(screen.getByText("Foto pertama")).toBeTruthy();

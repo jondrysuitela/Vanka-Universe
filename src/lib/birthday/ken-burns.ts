@@ -6,18 +6,17 @@
  * re-derived inline.
  *
  * DESIGN GOALS (what "smooth" means here, concretely):
- *  - SLOW. A zoom that finishes in a second reads as a jump. The drift runs for
+ *  - SLOW. A zoom that finishes in a second reads as a jump. The cycle runs for
  *    ~22s, so the eye registers life without being pulled away from the photo.
- *  - SMALL AMPLITUDE. The scale only travels between 1.0 and 1.08. Anything
- *    beyond ~10% starts to feel like a video crop rather than a photograph.
+ *  - SMALL AMPLITUDE. The default range is 8%; the gallery gives each photo a
+ *    stable, slightly varied range so the movement remains noticeable.
  *  - CONTINUOUS, never a stop-and-restart. The photo zooms IN for the first half
  *    and back OUT for the second, so there is no visible seam where a loop
  *    resets. A one-way zoom must snap back; this does not.
- *  - DETERMINISTIC PER ITEM. Each item's direction and starting point come from
- *    its stable media id, not from Math.random(), so the photo motion stays
- *    consistent between renders.
- *  - REDUCED MOTION IS A HARD STOP. The caller passes `reduce`; this module
- *    returns a still frame, never a slower animation.
+ *  - PHOTO ONLY. The caller applies these values to the image element itself,
+ *    keeping the scrapbook paper and frame stationary.
+ *  - REDUCED MOTION IS A HARD STOP. The caller skips the animation entirely
+ *    when reduced motion is requested.
  */
 
 /** One full in-and-out cycle. Slow on purpose; see DESIGN GOALS. */
@@ -30,51 +29,18 @@ export const KEN_BURNS_SCALE_RANGE = 0.08;
 export const KEN_BURNS_SCALE_MIN = 1;
 export const KEN_BURNS_SCALE_MAX = KEN_BURNS_SCALE_MIN + KEN_BURNS_SCALE_RANGE;
 
-/** How far the frame drifts, in percent of its own size. */
-export const KEN_BURNS_PAN_PERCENT = 1.6;
-
 export interface KenBurnsMotion {
-  /** Keyframe values for `scale`, in application order. */
   scale: [number, number, number];
-  /** Keyframe values for `x`, in application order (percent). */
-  x: [number, number, number];
-  /** Keyframe values for `y`, in application order (percent). */
-  y: [number, number, number];
   duration: number;
-  /** Passed straight to framer-motion. */
-  ease: "easeInOut";
-  repeat: number;
-  repeatType: "loop";
 }
 
-/** The four diagonal drifts. The index picks one; the sign pairs stay stable. */
-const DIRECTIONS: ReadonlyArray<{ x: 1 | -1; y: 1 | -1 }> = [
-  { x: 1, y: -1 },
-  { x: -1, y: -1 },
-  { x: -1, y: 1 },
-  { x: 1, y: 1 },
-];
-
-/**
- * Motion for the photo at `index`. Stable: the same index always yields the
- * same drift, in every render and on every client.
- */
+/** Zoom cycle for a photo; the caller supplies a stable per-photo zoom range. */
 export function kenBurnsMotion(
-  index: number,
   zoomRange = KEN_BURNS_SCALE_RANGE,
 ): KenBurnsMotion {
-  const direction = DIRECTIONS[((index % DIRECTIONS.length) + DIRECTIONS.length) % DIRECTIONS.length];
-  const pan = KEN_BURNS_PAN_PERCENT;
-
   return {
-    // in → out: the second half retraces the first, so the loop has no seam.
     scale: [KEN_BURNS_SCALE_MIN, KEN_BURNS_SCALE_MIN + zoomRange, KEN_BURNS_SCALE_MIN],
-    x: [0, direction.x * pan, 0],
-    y: [0, direction.y * pan, 0],
     duration: KEN_BURNS_DURATION_S,
-    ease: "easeInOut",
-    repeat: Number.POSITIVE_INFINITY,
-    repeatType: "loop",
   };
 }
 

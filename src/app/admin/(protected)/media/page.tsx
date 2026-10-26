@@ -13,6 +13,7 @@ import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import { cycleContainingUpload, isCycleRevealed } from "@/lib/birthday/cycle";
 import { saveLetterEnsuringEdition } from "@/lib/birthday/letter-sync";
 import { compressForUpload, describeSavings } from "@/lib/media/compress";
+import ScrapbookImageCropper from "@/components/admin/media/ScrapbookImageCropper";
 
 /**
  * Pustaka Media — upload photos/videos to the private local server store.
@@ -116,10 +117,12 @@ function validateFile(file: File): { kind: MediaKind } | { error: string } {
 
 interface SelectedFile {
   file: File;
+  uploadFile?: File;
   name: string;
   size: number;
   kind: MediaKind;
   url: string;
+  uploadUrl?: string;
 }
 
 interface SavedMedia {
@@ -137,6 +140,7 @@ interface SavedMedia {
 export default function AdminMediaPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selected, setSelected] = useState<SelectedFile | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
 
   // Optional upload-time metadata (judul + keterangan).
@@ -150,13 +154,20 @@ export default function AdminMediaPage() {
 
   const { showToast } = useToast();
 
-  // Release the previous object URL whenever the selection changes or unmounts.
+  // Keep the original and crop preview URLs alive independently.
   useEffect(() => {
     const url = selected?.url;
     return () => {
       if (url) URL.revokeObjectURL(url);
     };
-  }, [selected]);
+  }, [selected?.url]);
+
+  useEffect(() => {
+    const url = selected?.uploadUrl;
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [selected?.uploadUrl]);
 
   // Load already-stored media (private endpoint; needs an admin session).
   useEffect(() => {
@@ -196,10 +207,12 @@ export default function AdminMediaPage() {
       kind: result.kind,
       url: URL.createObjectURL(file),
     });
+    setCropOpen(false);
   }
 
   function clearSelection() {
     setSelected(null);
+    setCropOpen(false);
     setPickerError(null);
     setSaveError(null);
     setUploadTitle("");
@@ -215,7 +228,11 @@ export default function AdminMediaPage() {
       // Shrink photos in the browser first: a camera-sized JPEG becomes a
       // modest, still-sharp file, so every grid that renders it stays light.
       // Videos and GIFs pass through unchanged (see `lib/media/compress.ts`).
-      const shrunk = await compressForUpload(selected.file, selected.kind);
+      const shrunk = await compressForUpload(selected.uploadFile ?? selected.file, selected.kind);
+      if (shrunk.file.size > MAX_IMAGE_BYTES && selected.kind === "image") {
+        setSaveError("Ukuran foto hasil crop masih melebihi 10 MB.");
+        return;
+      }
 
       const form = new FormData();
       form.append("file", shrunk.file, shrunk.file.name);
@@ -233,6 +250,7 @@ export default function AdminMediaPage() {
         setSaveError(body?.error?.message ?? "Gagal menyimpan file ke server.");
         return;
       }
+
       setSaved((prev) => [body.data as SavedMedia, ...prev]);
       clearSelection();
       const savings = describeSavings(shrunk);
@@ -248,6 +266,15 @@ export default function AdminMediaPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function applyCrop(file: File) {
+    setSelected((current) =>
+      current
+        ? { ...current, uploadFile: file, uploadUrl: URL.createObjectURL(file) }
+        : current,
+    );
+    setCropOpen(false);
   }
 
   /** The photo awaiting confirmation, or null when no dialog is open. */
@@ -367,7 +394,8 @@ export default function AdminMediaPage() {
             <h2 className="text-lg font-display tracking-wider text-[#fdf3d8]">Pilih File Media</h2>
             <p className="text-xs text-[#fdf3d8]/60">
               Gambar (JPEG, PNG, WebP, GIF) maks 10 MB · Video MP4 maks 50 MB. Tipe nyata diperiksa
-              ulang oleh server sebelum disimpan.
+              ulang oleh server sebelum disimpan. Foto JPEG, PNG, dan WebP bisa di-crop ke rasio
+              scrapbook 4:5 sebelum upload.
             </p>
           </div>
 
@@ -397,9 +425,9 @@ export default function AdminMediaPage() {
                     // <img> is used deliberately for the local preview.
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={selected.url}
+                      src={selected.uploadUrl ?? selected.url}
                       alt={`Pratinjau gambar ${selected.name}`}
-                      className="max-h-80 w-auto object-contain"
+                      className={`max-h-80 w-auto object-contain ${selected.uploadFile ? "aspect-[4/5]" : ""}`}
                     />
                   ) : (
                     <video
@@ -413,19 +441,47 @@ export default function AdminMediaPage() {
                 </div>
               </div>
 
+              {selected.kind === "image" && selected.file.type !== "image/gif" && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCropOpen(true)}
+                    className="rounded-lg border border-[#f6d77a]/45 px-4 py-2 text-sm text-[#f6d77a] transition hover:bg-[#f6d77a]/10"
+                  >
+                    {selected.uploadFile ? "Atur ulang crop 4:5" : "Crop untuk scrapbook 4:5"}
+                  </button>
+                  {selected.uploadFile && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelected((current) =>
+                          current ? { ...current, uploadFile: undefined, uploadUrl: undefined } : current,
+                        )
+                      }
+                      className="text-sm text-[#fdf3d8]/65 underline underline-offset-4 hover:text-[#fdf3d8]"
+                    >
+                      Gunakan foto asli
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-[#fdf3d8]/85 space-y-1">
                 <p className="break-all">
                   <span className="text-[#fdf3d8]/60">Nama file:</span> {selected.name}
                 </p>
                 <p>
-                  <span className="text-[#fdf3d8]/60">Ukuran:</span> {formatBytes(selected.size)}
+                  <span className="text-[#fdf3d8]/60">Ukuran:</span>{" "}
+                  {formatBytes(selected.uploadFile?.size ?? selected.size)}
                 </p>
                 <p>
                   <span className="text-[#fdf3d8]/60">Jenis:</span>{" "}
                   {selected.kind === "image" ? "Gambar" : "Video"}
                 </p>
                 <p className="pt-1 font-medium text-[#f6d77a]">
-                  Pratinjau sementara — belum tersimpan
+                  {selected.uploadFile
+                    ? "Hasil crop 4:5 siap diupload. Foto asli di perangkat tidak diubah."
+                    : "Pratinjau sementara — belum tersimpan"}
                 </p>
               </div>
 
@@ -574,6 +630,14 @@ export default function AdminMediaPage() {
           </div>
         )}
       </section>
+
+      {cropOpen && selected?.kind === "image" && selected.file.type !== "image/gif" && (
+        <ScrapbookImageCropper
+          file={selected.file}
+          onCancel={() => setCropOpen(false)}
+          onApply={applyCrop}
+        />
+      )}
 
       <ConfirmDialog
         open={thumbCandidate !== null}

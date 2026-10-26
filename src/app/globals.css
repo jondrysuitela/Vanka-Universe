@@ -168,6 +168,16 @@ html {
   }
 }
 
+@keyframes memory-photo-ken-burns {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(var(--ken-burns-scale, 1.1));
+  }
+}
+
 .star-twinkle {
   animation-name: star-twinkle;
   animation-timing-function: ease-in-out;
@@ -186,6 +196,13 @@ html {
   animation-iteration-count: infinite;
 }
 
+.memory-photo-ken-burns {
+  animation: memory-photo-ken-burns var(--ken-burns-duration, 22s) ease-in-out
+    var(--ken-burns-delay, 0s) infinite;
+  transform-origin: var(--ken-burns-origin-x, 50%) var(--ken-burns-origin-y, 50%);
+  will-change: transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -193,7 +210,8 @@ html {
 
   .star-twinkle,
   .gold-drift,
-  .aurora-breathe {
+  .aurora-breathe,
+  .memory-photo-ken-burns {
     animation: none !important;
   }
 }

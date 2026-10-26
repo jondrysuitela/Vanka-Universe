@@ -87,7 +87,7 @@ function itemCaption(item: GalleryItem): string {
   return item.title?.trim() || item.name;
 }
 
-/** Stable per-photo seed for varied Ken Burns directions and starting phases. */
+/** Stable per-photo seed for varied zoom amount, origin and starting phase. */
 function photoMotionIndex(id: string): number {
   let hash = 2166136261;
   for (let index = 0; index < id.length; index += 1) {
@@ -151,8 +151,7 @@ function FrameMedia({
    */
   kenBurns?: boolean;
   /**
-   * Position of this item in the album. Picks the drift direction, so each
-   * photo moves its own way and the movement never looks recycled.
+   * Stable per-photo seed that varies zoom strength, origin and starting phase.
    */
   motionIndex?: number;
   zoomRange?: number;
@@ -164,47 +163,29 @@ function FrameMedia({
     // in public). Next's image optimizer fetches such a URL internally with NO
     // cookies, so a session-gated route answers 401 and the frame stays empty.
     // Skipping the optimizer lets the BROWSER fetch it with the session cookie.
+    const drift = kenBurns ? kenBurnsMotion(zoomRange) : undefined;
     const image = (
       <Image
         src={src}
         alt={alt}
         fill
         sizes="(max-width: 768px) 100vw, 50vw"
-        className={imageFit === "contain" ? "object-contain" : "object-cover"}
+        className={`${imageFit === "contain" ? "object-contain" : "object-cover"}${kenBurns ? " memory-photo-ken-burns" : ""}`}
+        style={
+          drift
+            ? ({
+                "--ken-burns-scale": drift.scale[1],
+                "--ken-burns-duration": `${drift.duration}s`,
+                "--ken-burns-delay": `-${((motionIndex % 5) * 0.6)}s`,
+                "--ken-burns-origin-x": `${30 + (motionIndex % 5) * 10}%`,
+                "--ken-burns-origin-y": `${30 + ((motionIndex >>> 3) % 5) * 10}%`,
+              } as CSSProperties)
+            : undefined
+        }
         unoptimized
       />
     );
-    if (!kenBurns) return image;
-    // The wrapper is the positioned ancestor that `fill` needs, and clipping it
-    // keeps the drift inside the rounded frame.
-    //
-    // The motion itself comes from the pure, unit-tested `kenBurnsMotion`: a
-    // slow zoom IN then OUT with a slight diagonal drift. It retraces its own
-    // path, so there is no visible snap where the loop restarts. Duration,
-    // amplitude and direction all live in that module — not here.
-    const drift = kenBurnsMotion(motionIndex, zoomRange);
-    return (
-      <motion.div
-        key={`ken-burns-${motionIndex}`}
-        className="absolute inset-0 overflow-hidden will-change-transform"
-        style={{ transformOrigin: "center center" }}
-        initial={false}
-        animate={{ scale: drift.scale, x: drift.x, y: drift.y }}
-        transition={{
-          duration: drift.duration,
-          ease: drift.ease,
-          repeat: drift.repeat,
-          repeatType: drift.repeatType,
-          // NEGATIVE: each photo starts part-way into its own cycle, so two
-          // visible photos never breathe in lockstep. A positive delay would
-          // also do that, but it freezes the photo at rest for up to 2.4s
-          // first, which is the one thing this motion exists to avoid.
-          delay: -((motionIndex % 5) * 0.6),
-        }}
-      >
-        {image}
-      </motion.div>
-    );
+    return image;
   }
   if (kind === "video" && src) {
     return (
@@ -364,9 +345,9 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
   };
 
   const frameVariants = {
-    initial: { opacity: 0, scale: reduce ? 1 : 0.985 },
-    animate: { opacity: 1, scale: 1 },
-    exit: { opacity: 0, scale: reduce ? 1 : 0.985 },
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
   };
 
   return (
@@ -376,12 +357,27 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
         className="relative grid aspect-[4/5] w-full max-w-2xl place-items-center overflow-visible bg-transparent"
         style={{ perspective: 1400 }}
       >
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+          <span className="absolute left-[2%] top-[4%] h-[18%] w-[35%] rotate-[-9deg] bg-[#3a2b2b]/80 blur-[1px]" />
+          <span className="absolute right-[1%] top-[36%] h-[15%] w-[31%] rotate-[8deg] bg-[#c49c61]/30 blur-[2px]" />
+          <span className="absolute bottom-[6%] left-[12%] h-[13%] w-[38%] rotate-[5deg] bg-[#342627]/75 blur-[1px]" />
+          <span className="absolute right-[8%] top-[5%] h-8 w-20 rotate-[12deg] border-x border-white/20 bg-[#e9d8a9]/75 shadow-md sm:h-10 sm:w-28" />
+          <span className="absolute bottom-[18%] right-[8%] h-7 w-16 rotate-[-8deg] border-x border-white/20 bg-[#e9d8a9]/70 shadow-md sm:h-9 sm:w-24" />
+          <span className="absolute left-[12%] top-[43%] h-2 w-20 -rotate-[18deg] rounded-sm bg-[#f2e8d1]/75 shadow sm:w-28" />
+        </div>
+
         {list.length > 1 && (
           <AnimatePresence initial={false} custom={direction}>
-            {[-1, 1].map((offset) => {
+            {[-1, 1, 2].map((offset) => {
               const cardIndex = (index + offset + list.length) % list.length;
               const card = list[cardIndex];
               const isImage = card.kind === "image" && card.id !== PLACEHOLDER_ITEM.id;
+              const placement =
+                offset === -1
+                  ? "left-[2%] top-[12%] rotate-[-12deg]"
+                  : offset === 1
+                    ? "right-[2%] top-[10%] rotate-[10deg]"
+                    : "bottom-[9%] left-[4%] rotate-[7deg]";
 
               return (
                 <motion.div
@@ -390,7 +386,7 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                   initial={
                     reduce
                       ? { opacity: 0 }
-                      : { opacity: 0, x: offset * 60, y: 24, rotate: offset * 18, scale: 0.78 }
+                      : { opacity: 0, x: offset * 60, y: 24, rotate: offset * 18 }
                   }
                   animate={
                     reduce
@@ -400,7 +396,6 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                           x: 0,
                           y: 0,
                           rotate: offset < 0 ? -9 : 8,
-                          scale: 1,
                         }
                   }
                   exit={
@@ -411,7 +406,6 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                           x: direction * -90,
                           y: 30,
                           rotate: offset * 18,
-                          scale: 0.82,
                         }
                   }
                   transition={{
@@ -422,11 +416,8 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                     mass: 1.15,
                   }}
                   aria-hidden="true"
-                  className={`absolute top-1/2 z-10 aspect-[3/4] w-[27%] -translate-y-1/2 overflow-hidden border-[5px] border-[#f2eadb] bg-[#f2eadb] p-1 shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[7px] sm:p-1.5 ${
-                    offset < 0
-                      ? "left-[3%] -rotate-[12deg] sm:left-[4%]"
-                      : "right-[3%] rotate-[11deg] sm:right-[4%]"
-                  }`}
+                  data-testid="memory-scrapbook-print"
+                  className={`absolute z-10 aspect-[3/4] w-[30%] overflow-hidden border-[5px] border-[#f2eadb] bg-[#f2eadb] p-1 shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[7px] sm:p-1.5 ${placement}`}
                 >
                   {isImage && (
                     <Image
@@ -459,7 +450,7 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
               exit="exit"
               transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: "easeInOut" }}
               data-testid="memory-scrapbook-photo"
-              className="relative col-start-1 row-start-1 aspect-[4/5] w-[76%] max-w-none border-[8px] border-[#f2eadb] bg-[#f2eadb] p-1.5 shadow-[0_28px_75px_-22px_rgba(0,0,0,0.9)] sm:border-[12px] sm:p-2"
+              className="relative col-start-1 row-start-1 aspect-[4/5] w-[62%] max-w-none border-[8px] border-[#f2eadb] bg-[#f2eadb] p-1.5 shadow-[0_28px_75px_-22px_rgba(0,0,0,0.9)] sm:border-[12px] sm:p-2"
               style={{ transformPerspective: 1400, transformStyle: "preserve-3d" }}
             >
               <GalleryFrame
@@ -469,7 +460,7 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                 unframed
                 kenBurns={item.kind === "image" && !reduce}
                 motionIndex={photoMotionIndex(item.id)}
-                zoomRange={0.04 + (photoMotionIndex(item.id) % 6) * 0.008}
+                zoomRange={0.1 + ((photoMotionIndex(item.id) >>> 4) % 6) * 0.01}
                 className="aspect-[4/5] w-full bg-[#17130f]"
                 footer={
                   <figcaption className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 pb-4 pt-12 text-left sm:px-5">
@@ -497,7 +488,7 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
               )}
               <motion.span
                 aria-hidden="true"
-                className="pointer-events-none absolute -top-2 left-1/2 z-20 h-7 w-20 -translate-x-1/2 rotate-[-3deg] border-x border-white/20 bg-[#e9d8a9]/80 shadow-sm sm:-top-3 sm:h-9 sm:w-28"
+                className="pointer-events-none absolute -top-2 left-1/2 z-30 h-7 w-20 -translate-x-1/2 rotate-[-3deg] border-x border-white/20 bg-[#e9d8a9]/80 shadow-sm sm:-top-3 sm:h-9 sm:w-28"
                 initial={false}
                 animate={reduce ? { opacity: 0 } : { opacity: [0, 0.95, 0.72], y: [8, 0, 0] }}
                 transition={{ duration: reduce ? 0 : 0.65, ease: "easeOut" }}

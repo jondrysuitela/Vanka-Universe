@@ -6,6 +6,7 @@ import Link from "next/link";
 import ConfirmDialog from "@/components/admin/ui/ConfirmDialog";
 import { useToast } from "@/components/admin/ui/ToastProvider";
 import { compressForUpload, describeSavings } from "@/lib/media/compress";
+import ScrapbookImageCropper from "@/components/admin/media/ScrapbookImageCropper";
 import {
   EMPTY_GALLERY_STATE,
   addPhoto,
@@ -104,10 +105,12 @@ function validateUploadFile(file: File): { kind: UploadKind } | { error: string 
 
 interface SelectedUpload {
   file: File;
+  uploadFile?: File;
   name: string;
   size: number;
   kind: UploadKind;
   url: string;
+  uploadUrl?: string;
 }
 
 export default function AdminArchiveGallery() {
@@ -124,18 +127,26 @@ export default function AdminArchiveGallery() {
   // Arsip-ibu upload widget state.
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadSelected, setUploadSelected] = useState<SelectedUpload | null>(null);
+  const [uploadCropOpen, setUploadCropOpen] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const dirty = !galleryStatesEqual(gallery, baseline);
 
-  // Release the previous upload preview URL whenever selection changes/unmounts.
+  // Keep original and cropped preview URLs alive independently.
   useEffect(() => {
     const url = uploadSelected?.url;
     return () => {
       if (url) URL.revokeObjectURL(url);
     };
-  }, [uploadSelected]);
+  }, [uploadSelected?.url]);
+
+  useEffect(() => {
+    const url = uploadSelected?.uploadUrl;
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [uploadSelected?.uploadUrl]);
 
   // Initial load: media library + saved gallery. Never overwrites local edits
   // (this only runs on mount, before any edit exists).
@@ -193,6 +204,7 @@ export default function AdminArchiveGallery() {
 
   function clearUploadSelection() {
     setUploadSelected(null);
+    setUploadCropOpen(false);
     setUploadError(null);
     setUploadOpen(false);
   }
@@ -216,6 +228,16 @@ export default function AdminArchiveGallery() {
       kind: result.kind,
       url: URL.createObjectURL(file),
     });
+    setUploadCropOpen(false);
+  }
+
+  function applyUploadCrop(file: File) {
+    setUploadSelected((current) =>
+      current
+        ? { ...current, uploadFile: file, uploadUrl: URL.createObjectURL(file) }
+        : current,
+    );
+    setUploadCropOpen(false);
   }
 
   async function handleUploadSave() {
@@ -225,7 +247,14 @@ export default function AdminArchiveGallery() {
     try {
       // Shrink photos in the browser first (videos and GIFs pass through), so
       // the archive renders modest files instead of camera-sized originals.
-      const shrunk = await compressForUpload(uploadSelected.file, uploadSelected.kind);
+      const shrunk = await compressForUpload(
+        uploadSelected.uploadFile ?? uploadSelected.file,
+        uploadSelected.kind,
+      );
+      if (shrunk.file.size > UPLOAD_MAX_IMAGE && uploadSelected.kind === "image") {
+        setUploadError("Ukuran foto hasil crop masih melebihi 10 MB.");
+        return;
+      }
 
       const form = new FormData();
       form.append("file", shrunk.file, shrunk.file.name);
@@ -243,8 +272,6 @@ export default function AdminArchiveGallery() {
         setUploadError(body?.error?.message ?? "Gagal menyimpan file ke server.");
         return;
       }
-      const url = uploadSelected.url;
-      URL.revokeObjectURL(url);
       clearUploadSelection();
       const savings = describeSavings(shrunk);
       showToast({
@@ -379,7 +406,8 @@ export default function AdminArchiveGallery() {
             <p className="text-xs text-[#fdf3d8]/60">
               File ini masuk pool <span className="text-[#a8e6cf]">Arsip Ibu</span> — tidak pernah
               otomatis muncul di galeri pengalaman ulang tahun. Gambar (JPEG/PNG/WebP/GIF) maks 10
-              MB · Video MP4 maks 50 MB. Tipe nyata diperiksa ulang oleh server.
+              MB · Video MP4 maks 50 MB. Foto JPEG, PNG, dan WebP bisa di-crop ke rasio scrapbook
+              4:5 sebelum upload.
             </p>
           </div>
 
@@ -412,10 +440,10 @@ export default function AdminArchiveGallery() {
                     // <img> is used deliberately for the local preview.
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={uploadSelected.url}
+                      src={uploadSelected.uploadUrl ?? uploadSelected.url}
                       alt={`Pratinjau gambar ${uploadSelected.name}`}
                       decoding="async"
-                      className="max-h-80 w-auto object-contain"
+                      className={`max-h-80 w-auto object-contain ${uploadSelected.uploadFile ? "aspect-[4/5]" : ""}`}
                     />
                   ) : (
                     <video
@@ -429,16 +457,45 @@ export default function AdminArchiveGallery() {
                 </div>
               </div>
 
+              {uploadSelected.kind === "image" && uploadSelected.file.type !== "image/gif" && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setUploadCropOpen(true)}
+                    className="rounded-lg border border-[#a8e6cf]/45 px-4 py-2 text-sm text-[#a8e6cf] transition hover:bg-[#a8e6cf]/10"
+                  >
+                    {uploadSelected.uploadFile ? "Atur ulang crop 4:5" : "Crop foto 4:5"}
+                  </button>
+                  {uploadSelected.uploadFile && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setUploadSelected((current) =>
+                          current
+                            ? { ...current, uploadFile: undefined, uploadUrl: undefined }
+                            : current,
+                        )
+                      }
+                      className="text-sm text-[#fdf3d8]/65 underline underline-offset-4 hover:text-[#fdf3d8]"
+                    >
+                      Gunakan foto asli
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-[#fdf3d8]/85 space-y-1">
                 <p className="break-all">
                   <span className="text-[#fdf3d8]/60">Nama file:</span> {uploadSelected.name}
                 </p>
                 <p>
                   <span className="text-[#fdf3d8]/60">Ukuran:</span>{" "}
-                  {uploadFormatBytes(uploadSelected.size)}
+                  {uploadFormatBytes(uploadSelected.uploadFile?.size ?? uploadSelected.size)}
                 </p>
                 <p className="pt-1 font-medium text-[#a8e6cf]">
-                  Pratinjau sementara — akan disimpan ke pool Arsip Ibu
+                  {uploadSelected.uploadFile
+                    ? "Hasil crop 4:5 siap diupload. Foto asli di perangkat tidak diubah."
+                    : "Pratinjau sementara — akan disimpan ke pool Arsip Ibu"}
                 </p>
               </div>
 
@@ -481,6 +538,16 @@ export default function AdminArchiveGallery() {
           )}
         </section>
       )}
+
+      {uploadCropOpen &&
+        uploadSelected?.kind === "image" &&
+        uploadSelected.file.type !== "image/gif" && (
+          <ScrapbookImageCropper
+            file={uploadSelected.file}
+            onCancel={() => setUploadCropOpen(false)}
+            onApply={applyUploadCrop}
+          />
+        )}
 
       {/* ---------------------------------------------------- media library */}
       {mediaState.status !== "ok" && (
