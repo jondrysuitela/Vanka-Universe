@@ -123,6 +123,7 @@ export default function Home() {
   const [countdownNow, setCountdownNow] = useState<number | null>(null);
   const [countdownStarted, setCountdownStarted] = useState(false);
   const [countdownDismissed, setCountdownDismissed] = useState(false);
+  const [openExperienceFromCountdown, setOpenExperienceFromCountdown] = useState(false);
 
   useEffect(() => {
     const revealAt = cycleWindowForYear(FIRST_EXPERIENCE_YEAR)?.revealAt.getTime();
@@ -551,6 +552,7 @@ export default function Home() {
           now={countdownNow}
           onOpenGift={() => {
             setCountdownDismissed(true);
+            setOpenExperienceFromCountdown(true);
             setOverlayOpen(true);
           }}
         />
@@ -572,7 +574,11 @@ export default function Home() {
               countdownNow !== null &&
               countdownNow >= experienceCycle.revealAt.getTime()
             }
-            onClose={() => setOverlayOpen(false)}
+            autoOpenGift={openExperienceFromCountdown}
+            onClose={() => {
+              setOpenExperienceFromCountdown(false);
+              setOverlayOpen(false);
+            }}
           />
         </div>
       )}

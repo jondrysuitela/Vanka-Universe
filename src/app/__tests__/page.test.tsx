@@ -204,7 +204,8 @@ describe("landing page — on the birthday itself", () => {
       await vi.advanceTimersByTimeAsync(BIRTHDAY_CELEBRATION_MS);
     });
     fireEvent.click(screen.getByRole("button", { name: "Buka Kado Vanka" }));
-    expect(screen.getByRole("button", { name: /Buka hadiah/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Buka Surat" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Buka hadiah/i })).toBeNull();
     expect(
       document
         .querySelector('[aria-label="Vanka Experience — ulang tahun Vanka"]')

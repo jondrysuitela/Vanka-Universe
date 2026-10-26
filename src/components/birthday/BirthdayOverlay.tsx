@@ -21,6 +21,7 @@ export default function BirthdayOverlay({
   editionAge,
   editionYear,
   autoStartMusic = false,
+  autoOpenGift = false,
   onClose,
 }: {
   /** Edition played by the overlay (the birthday being celebrated). */
@@ -29,6 +30,8 @@ export default function BirthdayOverlay({
   editionYear: number;
   /** Starts playback at the birthday countdown's reveal instant. */
   autoStartMusic?: boolean;
+  /** Opens the experience directly after the countdown's continue action. */
+  autoOpenGift?: boolean;
   onClose: () => void;
 }) {
   // Close on Escape, like any other dialog.
@@ -62,6 +65,7 @@ export default function BirthdayOverlay({
           editionYear={editionYear}
           overlay
           autoStartMusic={autoStartMusic}
+          autoOpenGift={autoOpenGift}
           onClose={onClose}
         />
 
