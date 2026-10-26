@@ -2,9 +2,41 @@
 import "./jsdom-stubs";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+
+vi.mock("framer-motion", async () => {
+  const { createElement } = await import("react");
+  const motion = new Proxy(
+    {},
+    {
+      get: (_target, tag: string) =>
+        function MotionElement(props: Record<string, unknown>) {
+          const elementProps = { ...props };
+          for (const prop of [
+            "initial",
+            "animate",
+            "exit",
+            "variants",
+            "custom",
+            "transition",
+            "whileInView",
+            "viewport",
+          ]) {
+            delete elementProps[prop];
+          }
+          return createElement(tag, elementProps);
+        },
+    },
+  );
+  return {
+    AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
+    motion,
+    useReducedMotion: () => false,
+  };
+});
 
 import Home from "@/app/page";
+import { BIRTHDAY_CELEBRATION_MS } from "@/lib/birthday/countdown";
 
 /**
  * The landing page follows the SAME date policy as the server:
@@ -59,6 +91,9 @@ function cardFor(title: string): HTMLElement {
 async function renderAt(nowMs: number): Promise<HTMLElement> {
   vi.setSystemTime(new Date(nowMs));
   installFetchSpy();
+  if (nowMs >= REVEAL) {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  }
   const { container } = render(<Home />);
   // Frame 1: the page reads the clock. Frame 2: the overlay's player mounts and
   // reads its content. (Each deferred read is one animation frame.)
@@ -135,7 +170,45 @@ describe("landing page — on the birthday itself", () => {
     expect(screen.getByText("00:15")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Buka Kado Vanka/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Buka hadiah/i })).toBeNull();
-    expect(document.querySelector('[aria-label="Vanka Experience — ulang tahun Vanka"]')).toBeNull();
+    const experience = document.querySelector('[aria-label="Vanka Experience — ulang tahun Vanka"]');
+    expect(experience).not.toBeNull();
+    expect(experience?.parentElement?.hasAttribute("hidden")).toBe(true);
+  });
+
+  it("starts public experience music at midnight and keeps one flow into the birthday scenes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(REVEAL - 15_000);
+    installFetchSpy();
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    render(<Home />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(screen.getByText("00:15")).toBeTruthy();
+    expect(play).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    expect(screen.getByRole("heading", { name: "Jam dua belas tepat!" })).toBeTruthy();
+    expect(screen.getByTestId("birthday-ambient-celebration")).toBeTruthy();
+    await act(async () => {
+      for (let flush = 0; flush < 10; flush += 1) await Promise.resolve();
+    });
+    expect(play).toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(BIRTHDAY_CELEBRATION_MS);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Buka Kado Vanka" }));
+    expect(screen.getByRole("button", { name: /Buka hadiah/i })).toBeTruthy();
+    expect(
+      document
+        .querySelector('[aria-label="Vanka Experience — ulang tahun Vanka"]')
+        ?.parentElement?.hasAttribute("hidden"),
+    ).toBe(false);
+    expect(play).toHaveBeenCalled();
   });
 
   it("covers the page with the experience overlay", async () => {
@@ -166,7 +239,7 @@ describe("landing page — on the birthday itself", () => {
       screen.getByRole("button", { name: "Buka surat ulang tahun dari Ayah" }).click();
       await new Promise((resolve) => window.setTimeout(resolve, 1150));
     });
-    expect(screen.queryByTestId("birthday-ambient-celebration")).toBeNull();
+    expect(screen.getByTestId("birthday-ambient-celebration")).toBeTruthy();
   });
 
   it("closes the overlay and keeps the card able to re-open it", async () => {

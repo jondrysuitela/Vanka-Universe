@@ -8,9 +8,10 @@ import BirthdayExperiencePlayer from "./BirthdayExperiencePlayer";
  * Landing-page overlay for the birthday ITSELF.
  *
  * On 27 October (00:00 → 28 October 00:00 WIT) the experience takes over the
- * landing page: it covers the whole viewport, over the dashboard, and its own
- * gift-box opening is the first thing a visitor meets. The visitor can close it
- * to read the landing page; the chapter card then re-opens the same overlay.
+ * landing page: it covers the whole viewport, over the dashboard, and begins at
+ * the gift-box opening. When pre-mounted during the countdown, it stays hidden
+ * until the birthday celebration finishes. The visitor can close it to read
+ * the landing page; the chapter card then re-opens the same overlay.
  *
  * Only ever rendered for the birthday day (`publicExperiencePhase` ===
  * "birthday" in `experience-open.ts`). From the next day on, the experience
@@ -19,12 +20,15 @@ import BirthdayExperiencePlayer from "./BirthdayExperiencePlayer";
 export default function BirthdayOverlay({
   editionAge,
   editionYear,
+  autoStartMusic = false,
   onClose,
 }: {
   /** Edition played by the overlay (the birthday being celebrated). */
   editionAge: number;
   /** CALENDAR YEAR of that edition (age 1 → 2026). */
   editionYear: number;
+  /** Starts playback at the birthday countdown's reveal instant. */
+  autoStartMusic?: boolean;
   onClose: () => void;
 }) {
   // Close on Escape, like any other dialog.
@@ -57,6 +61,7 @@ export default function BirthdayOverlay({
           editionAge={editionAge}
           editionYear={editionYear}
           overlay
+          autoStartMusic={autoStartMusic}
           onClose={onClose}
         />
 

@@ -183,13 +183,16 @@ export default function Home() {
     };
   }, []);
 
-  const revealAt = cycleWindowForYear(FIRST_EXPERIENCE_YEAR)?.revealAt.getTime() ?? null;
+  const firstExperienceCycle = cycleWindowForYear(FIRST_EXPERIENCE_YEAR);
+  const revealAt = firstExperienceCycle?.revealAt.getTime() ?? null;
   const countdownVisible =
     countdownStarted &&
     !countdownDismissed &&
     countdownNow !== null &&
     revealAt !== null &&
     (countdownNow < revealAt || todayCycle?.year === FIRST_EXPERIENCE_YEAR);
+  const experienceCycle =
+    todayCycle ?? (countdownStarted || overlayOpen ? firstExperienceCycle : null);
 
   // Close the announcement with Escape, like any other dialog.
   useEffect(() => {
@@ -559,12 +562,19 @@ export default function Home() {
         the dashboard. Closing it reveals the dashboard; the chapter card can
         re-open it for the rest of the day.
       */}
-      {todayCycle !== null && overlayOpen && (
-        <BirthdayOverlay
-          editionAge={todayCycle.age}
-          editionYear={todayCycle.year}
-          onClose={() => setOverlayOpen(false)}
-        />
+      {experienceCycle !== null && (overlayOpen || countdownStarted) && (
+        <div hidden={!overlayOpen}>
+          <BirthdayOverlay
+            editionAge={experienceCycle.age}
+            editionYear={experienceCycle.year}
+            autoStartMusic={
+              experienceCycle.year === FIRST_EXPERIENCE_YEAR &&
+              countdownNow !== null &&
+              countdownNow >= experienceCycle.revealAt.getTime()
+            }
+            onClose={() => setOverlayOpen(false)}
+          />
+        </div>
       )}
     </main>
   );

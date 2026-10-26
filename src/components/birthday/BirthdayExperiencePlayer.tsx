@@ -53,6 +53,10 @@ export interface BirthdayExperiencePlayerProps {
   draftAge: number;
   /** Land directly on the letter scene (admin `letter=1`). */
   openLetter?: boolean;
+  /** Countdown flow: begin the background music at the birthday celebration. */
+  autoStartMusic?: boolean;
+  /** Admin countdown flow: treat the celebration's continue click as opening the gift. */
+  autoOpenGift?: boolean;
   /** PUBLIC replay of one archived edition; null = the newest revealed one. */
   editionAge: number | null;
   /**
@@ -70,6 +74,8 @@ export default function BirthdayExperiencePlayer({
   draftPreview,
   draftAge,
   openLetter = false,
+  autoStartMusic = false,
+  autoOpenGift = false,
   editionAge,
   editionYear = null,
   overlay = false,
@@ -78,6 +84,7 @@ export default function BirthdayExperiencePlayer({
   const [ready, setReady] = useState(false);
   const [active, setActive] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  const [autoOpenConsumed, setAutoOpenConsumed] = useState(false);
   /**
    * The visitor has clicked the gift box. That click is the gesture browsers
    * require before audio may play, so music is keyed off THIS — not off the
@@ -181,7 +188,11 @@ export default function BirthdayExperiencePlayer({
   const restart = useCallback(() => {
     setRevealed(false);
     setActive(0);
+    setMusicStarted(false);
+    setAutoOpenConsumed(true);
   }, []);
+  const experienceStarted = revealed || (autoOpenGift && !autoOpenConsumed);
+  const playbackStarted = musicStarted || autoStartMusic || (autoOpenGift && !autoOpenConsumed);
 
   return (
     <div className={overlay ? "relative min-h-dvh w-full" : "relative min-h-dvh"}>
@@ -203,7 +214,7 @@ export default function BirthdayExperiencePlayer({
         <ExperienceMusic
           age={editionAge ?? draftAge}
           editionYear={editionYear ?? birthdayYear(editionAge ?? draftAge)}
-          started={musicStarted}
+          started={playbackStarted}
           adminPreview={draftPreview}
           overlay={overlay}
         />
@@ -219,7 +230,7 @@ export default function BirthdayExperiencePlayer({
       )}
 
       {ready &&
-        (revealed ? (
+        (experienceStarted ? (
           <ExperienceScene
             active={active}
             onNext={next}
