@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
-import BirthdayAmbientEffects from "./BirthdayAmbientEffects";
 import GlitterBurst from "./GlitterBurst";
 
 /**
@@ -385,7 +384,6 @@ export default function LetterScene({ draft, preview = false, onFinish }: Letter
         Full-screen glitter while the envelope opens — the same transition as the
         gift box, so the two openings feel like one language.
       */}
-      {!opened && <BirthdayAmbientEffects />}
       <GlitterBurst active={opening} durationMs={reduce ? 350 : 1100} seed={0x4c455454} count={110} />
 
       <div className="flex flex-col items-center gap-3 text-center">

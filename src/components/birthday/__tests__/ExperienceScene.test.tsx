@@ -72,10 +72,14 @@ describe("ExperienceScene memory gallery", () => {
     });
 
     expect(screen.getByText("Foto pertama")).toBeTruthy();
+    expect(screen.getByTestId("birthday-ambient-celebration")).toBeTruthy();
     expect(screen.getByTestId("memory-scrapbook-stage").className).toContain("aspect-[4/5]");
     expect(screen.getByTestId("memory-scrapbook-stage").className).toContain("max-w-2xl");
-    expect(screen.getByTestId("memory-scrapbook-photo").className).toContain("w-[70%]");
-    expect(screen.getByTestId("memory-scrapbook-photo").className).toContain("max-w-md");
+    expect(screen.getByTestId("memory-scrapbook-photo").className).toContain("h-full");
+    expect(screen.getByTestId("memory-scrapbook-photo").className).toContain("w-[76%]");
+    expect(
+      screen.getByTestId("memory-scrapbook-photo").querySelector("figure")?.className,
+    ).not.toContain("border");
     expect(screen.getByAltText("Foto pertama").className).toContain("object-contain");
     act(() => {
       vi.advanceTimersByTime(10_000);
@@ -87,5 +91,19 @@ describe("ExperienceScene memory gallery", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Foto atau video sebelumnya" }));
     expect(screen.getByText("Foto pertama")).toBeTruthy();
+  });
+
+  it("keeps the celebration effects active throughout the letter scene", () => {
+    render(
+      <ExperienceScene
+        active={1}
+        onNext={vi.fn()}
+        onPrev={vi.fn()}
+        onRestart={vi.fn()}
+        galleryItems={galleryItems}
+      />,
+    );
+
+    expect(screen.getByTestId("birthday-ambient-celebration")).toBeTruthy();
   });
 });

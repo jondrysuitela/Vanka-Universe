@@ -4,11 +4,13 @@ import { motion, useReducedMotion } from "framer-motion";
 
 const FIREWORKS = [
   { x: 13, y: 30, delay: 0, color: "#f6d77a" },
-  { x: 86, y: 34, delay: 2.1, color: "#c4a7ff" },
-  { x: 74, y: 76, delay: 4.2, color: "#f3a6d2" },
+  { x: 86, y: 34, delay: 1.7, color: "#c4a7ff" },
+  { x: 74, y: 76, delay: 3.4, color: "#f3a6d2" },
+  { x: 45, y: 18, delay: 5.1, color: "#a9c8ff" },
+  { x: 28, y: 72, delay: 6.8, color: "#b6f5cd" },
 ] as const;
 
-const COLORS = ["#f6d77a", "#f3a6d2", "#a9c8ff", "#b6f5cd"] as const;
+const COLORS = ["#f6d77a", "#f3a6d2", "#a9c8ff", "#b6f5cd", "#fdf3d8"] as const;
 
 export default function BirthdayAmbientEffects() {
   const reduce = useReducedMotion();
@@ -42,16 +44,16 @@ export default function BirthdayAmbientEffects() {
               ease: "easeOut",
             }}
           />
-          {Array.from({ length: 12 }, (_, index) => {
-            const angle = (index / 12) * Math.PI * 2;
-            const distance = 26 + ((index * 13) % 28);
+          {Array.from({ length: 16 }, (_, index) => {
+            const angle = (index / 16) * Math.PI * 2;
+            const distance = 34 + ((index * 23) % 58);
             return (
               <motion.span
                 key={index}
-                className="absolute h-1 w-1 rounded-full"
+                className="absolute h-1.5 w-1.5 rounded-full"
                 style={{
                   backgroundColor: firework.color,
-                  boxShadow: `0 0 8px 2px ${firework.color}`,
+                  boxShadow: `0 0 12px 3px ${firework.color}`,
                 }}
                 animate={{
                   x: [0, Math.cos(angle) * distance],
@@ -63,7 +65,7 @@ export default function BirthdayAmbientEffects() {
                   duration: 1.2,
                   delay: firework.delay,
                   repeat: Infinity,
-                  repeatDelay: 5.3,
+                  repeatDelay: 5.8,
                   ease: "easeOut",
                 }}
               />
@@ -71,7 +73,7 @@ export default function BirthdayAmbientEffects() {
           })}
         </div>
       ))}
-      {Array.from({ length: 24 }, (_, index) => (
+      {Array.from({ length: 28 }, (_, index) => (
         <motion.span
           key={`glitter-${index}`}
           className="absolute h-1 w-1 rounded-full"
@@ -90,10 +92,10 @@ export default function BirthdayAmbientEffects() {
           }}
         />
       ))}
-      {Array.from({ length: 18 }, (_, index) => (
+      {Array.from({ length: 30 }, (_, index) => (
         <motion.span
           key={`confetti-${index}`}
-          className="absolute top-0 h-2 w-1 rounded-sm"
+          className="absolute top-0 h-3 w-1.5 rounded-sm"
           style={{
             left: `${(index * 47 + 9) % 100}%`,
             backgroundColor: COLORS[index % COLORS.length],
@@ -102,11 +104,11 @@ export default function BirthdayAmbientEffects() {
             y: ["-5vh", "105vh"],
             x: [0, index % 2 === 0 ? 18 : -18, 0],
             rotate: [0, 180, 360],
-            opacity: [0, 0.55, 0.45, 0],
+            opacity: [0, 0.8, 0.6, 0],
           }}
           transition={{
-            duration: 8 + (index % 5),
-            delay: (index % 9) * 0.8,
+            duration: 7 + (index % 6),
+            delay: (index % 10) * 0.65,
             repeat: Infinity,
             ease: "linear",
           }}

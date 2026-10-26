@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
+import BirthdayAmbientEffects from "./BirthdayAmbientEffects";
 import GlitterBurst from "./GlitterBurst";
 import LetterScene, { type LetterDraft, type LetterThumbnail } from "./LetterScene";
 import type { GalleryItem } from "@/lib/birthday/gallery/client-sync";
@@ -239,6 +240,7 @@ function PhotoFrame({
   kenBurns,
   motionIndex,
   imageFit,
+  unframed = false,
 }: {
   kind: GalleryKind;
   src?: string;
@@ -248,10 +250,11 @@ function PhotoFrame({
   kenBurns?: boolean;
   motionIndex?: number;
   imageFit?: "cover" | "contain";
+  unframed?: boolean;
 }) {
   return (
     <figure
-      className={`relative w-full overflow-hidden rounded-3xl border border-[#e9c67c]/25 ${className ?? ""}`}
+      className={`relative w-full overflow-hidden ${unframed ? "" : "rounded-3xl border border-[#e9c67c]/25"} ${className ?? ""}`}
     >
       <FrameMedia
         kind={kind}
@@ -279,6 +282,7 @@ function GalleryFrame({
   kenBurns,
   motionIndex,
   imageFit,
+  unframed,
 }: {
   item: GalleryItem;
   className?: string;
@@ -287,6 +291,7 @@ function GalleryFrame({
   kenBurns?: boolean;
   motionIndex?: number;
   imageFit?: "cover" | "contain";
+  unframed?: boolean;
 }) {
   if (item.id === PLACEHOLDER_ITEM.id) {
     return (
@@ -296,6 +301,7 @@ function GalleryFrame({
         alt={item.title ?? ""}
         className={className}
         footer={footer}
+        unframed={unframed}
       />
     );
   }
@@ -309,6 +315,7 @@ function GalleryFrame({
       kenBurns={kenBurns}
       motionIndex={motionIndex}
       imageFit={imageFit}
+      unframed={unframed}
     />
   );
 }
@@ -381,7 +388,7 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
     <div className="flex w-full max-w-5xl flex-col items-center gap-4">
       <div
         data-testid="memory-scrapbook-stage"
-        className="relative grid aspect-[4/5] w-full max-w-2xl place-items-center overflow-hidden rounded-[2rem] border border-white/10 bg-[#211a18] shadow-[0_30px_100px_-32px_rgba(0,0,0,0.9)]"
+        className="relative grid aspect-[4/5] w-full max-w-2xl place-items-center overflow-hidden bg-gradient-to-br from-[#171020] via-[#211a18] to-[#0c1023]"
         style={{ perspective: 1400 }}
       >
         <AnimatePresence initial={false} custom={direction}>
@@ -455,7 +462,7 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                     mass: 1.15,
                   }}
                   aria-hidden="true"
-                  className={`absolute top-1/2 z-10 aspect-[3/4] w-[32%] -translate-y-1/2 overflow-hidden border-[6px] border-[#f2eadb] bg-[#f2eadb] p-1 shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[9px] sm:p-1.5 ${
+                  className={`absolute top-1/2 z-10 aspect-[3/4] w-[27%] -translate-y-1/2 overflow-hidden border-[5px] border-[#f2eadb] bg-[#f2eadb] p-1 shadow-[0_18px_45px_-16px_rgba(0,0,0,0.9)] sm:border-[7px] sm:p-1.5 ${
                     offset < 0
                       ? "left-[3%] -rotate-[12deg] sm:left-[4%]"
                       : "right-[3%] rotate-[11deg] sm:right-[4%]"
@@ -478,10 +485,10 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
         )}
 
         {/*
-          The outgoing and incoming photos share one grid cell. The scrapbook
-          page-turn only runs when a gallery control changes the selected item.
+          The selected photograph fills the scrapbook page. Smaller prints peek
+          from behind it; there is no second card frame around the full photo.
         */}
-        <div className="z-20 grid w-full place-items-center">
+        <div className="z-20 grid h-full w-full place-items-center">
           <AnimatePresence initial={false} custom={direction}>
             <motion.div
               key={`${item.id}-${index}`}
@@ -492,14 +499,15 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
               exit="exit"
               transition={{ duration: reduce ? 0 : 1.15, ease: [0.22, 1, 0.36, 1] }}
               data-testid="memory-scrapbook-photo"
-              className="relative col-start-1 row-start-1 w-[70%] max-w-md border-[8px] border-[#f2eadb] bg-[#f2eadb] p-1.5 shadow-[0_28px_75px_-22px_rgba(0,0,0,0.9)] sm:border-[12px] sm:p-2"
+              className="relative col-start-1 row-start-1 h-full w-[76%] max-w-none"
               style={{ transformPerspective: 1400, transformStyle: "preserve-3d" }}
             >
               <GalleryFrame
                 item={item}
                 getMediaUrl={getMediaUrl}
                 imageFit="contain"
-                className="aspect-[3/4] w-full rounded-sm border-[#574735]/30 bg-[#17130f]"
+                unframed
+                className="aspect-[4/5] w-full bg-[#17130f] shadow-[0_20px_60px_-22px_rgba(0,0,0,0.9)]"
                 footer={
                   <figcaption className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 pb-4 pt-12 text-left sm:px-5">
                     <p className="font-script text-lg text-[#fff3d9] sm:text-2xl">{itemCaption(item)}</p>
@@ -807,6 +815,8 @@ export default function ExperienceScene({
       onKeyDown={handleKeyDown}
       className="relative mx-auto flex min-h-dvh w-full max-w-5xl flex-col items-center justify-center px-6 py-20 sm:px-10"
     >
+      <BirthdayAmbientEffects />
+
       {/* progress */}
       <div aria-hidden="true" className="absolute left-0 top-0 h-1 w-full bg-white/5">
         <div
