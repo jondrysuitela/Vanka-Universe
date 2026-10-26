@@ -75,12 +75,13 @@ describe("ExperienceScene memory gallery", () => {
     expect(screen.getByTestId("birthday-ambient-celebration")).toBeTruthy();
     expect(screen.getByTestId("memory-scrapbook-stage").className).toContain("aspect-[4/5]");
     expect(screen.getByTestId("memory-scrapbook-stage").className).toContain("max-w-2xl");
-    expect(screen.getByTestId("memory-scrapbook-photo").className).toContain("h-full");
+    expect(screen.getByTestId("memory-scrapbook-stage").className).not.toContain("bg-gradient");
+    expect(screen.getByTestId("memory-scrapbook-photo").className).toContain("border-[8px]");
     expect(screen.getByTestId("memory-scrapbook-photo").className).toContain("w-[76%]");
-    expect(
-      screen.getByTestId("memory-scrapbook-photo").querySelector("figure")?.className,
-    ).not.toContain("border");
     expect(screen.getByAltText("Foto pertama").className).toContain("object-contain");
+    expect(screen.getByAltText("Foto pertama").parentElement?.className).toContain(
+      "will-change-transform",
+    );
     act(() => {
       vi.advanceTimersByTime(10_000);
     });

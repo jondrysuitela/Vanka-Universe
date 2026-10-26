@@ -87,6 +87,15 @@ function itemCaption(item: GalleryItem): string {
   return item.title?.trim() || item.name;
 }
 
+/** Stable per-photo seed for varied Ken Burns directions and starting phases. */
+function photoMotionIndex(id: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < id.length; index += 1) {
+    hash = Math.imul(hash ^ id.charCodeAt(index), 16777619);
+  }
+  return hash >>> 0;
+}
+
 /** Deterministic, lightweight star field (no randomness on first paint). */
 function Stars({ count = 26 }: { count?: number }) {
   const stars = useMemo(
@@ -130,6 +139,7 @@ function FrameMedia({
   alt,
   kenBurns = false,
   motionIndex = 0,
+  zoomRange,
   imageFit = "cover",
 }: {
   kind: GalleryKind;
@@ -145,6 +155,7 @@ function FrameMedia({
    * photo moves its own way and the movement never looks recycled.
    */
   motionIndex?: number;
+  zoomRange?: number;
   imageFit?: "cover" | "contain";
 }) {
   if (kind === "image" && src) {
@@ -171,9 +182,10 @@ function FrameMedia({
     // slow zoom IN then OUT with a slight diagonal drift. It retraces its own
     // path, so there is no visible snap where the loop restarts. Duration,
     // amplitude and direction all live in that module — not here.
-    const drift = kenBurnsMotion(motionIndex);
+    const drift = kenBurnsMotion(motionIndex, zoomRange);
     return (
       <motion.div
+        key={`ken-burns-${motionIndex}`}
         className="absolute inset-0 overflow-hidden will-change-transform"
         style={{ transformOrigin: "center center" }}
         initial={false}
@@ -239,6 +251,7 @@ function PhotoFrame({
   footer,
   kenBurns,
   motionIndex,
+  zoomRange,
   imageFit,
   unframed = false,
 }: {
@@ -249,6 +262,7 @@ function PhotoFrame({
   footer?: ReactNode;
   kenBurns?: boolean;
   motionIndex?: number;
+  zoomRange?: number;
   imageFit?: "cover" | "contain";
   unframed?: boolean;
 }) {
@@ -262,6 +276,7 @@ function PhotoFrame({
         alt={alt}
         kenBurns={kenBurns}
         motionIndex={motionIndex}
+        zoomRange={zoomRange}
         imageFit={imageFit}
       />
       {footer}
@@ -281,6 +296,7 @@ function GalleryFrame({
   getMediaUrl,
   kenBurns,
   motionIndex,
+  zoomRange,
   imageFit,
   unframed,
 }: {
@@ -290,6 +306,7 @@ function GalleryFrame({
   getMediaUrl: (id: string) => string;
   kenBurns?: boolean;
   motionIndex?: number;
+  zoomRange?: number;
   imageFit?: "cover" | "contain";
   unframed?: boolean;
 }) {
@@ -314,6 +331,7 @@ function GalleryFrame({
       footer={footer}
       kenBurns={kenBurns}
       motionIndex={motionIndex}
+      zoomRange={zoomRange}
       imageFit={imageFit}
       unframed={unframed}
     />
@@ -346,76 +364,18 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
   };
 
   const frameVariants = {
-    initial: (travel: number) =>
-      reduce
-        ? { opacity: 0 }
-        : {
-            opacity: 0,
-            scale: 0.76,
-            x: travel * 210,
-            y: 52,
-            rotateZ: travel * 18,
-            rotateY: travel * 68,
-            filter: "blur(4px) brightness(1.25)",
-          },
-    animate: () =>
-      reduce
-        ? { opacity: 1 }
-        : {
-            opacity: 1,
-            scale: [0.91, 1.035, 1],
-            x: [direction * -42, direction * 14, 0],
-            y: [32, -10, 0],
-            rotateZ: [direction * -9, direction * 3, index % 2 === 0 ? -2.5 : 2.5],
-            rotateY: [direction * -24, direction * 7, 0],
-            filter: ["blur(3px) brightness(1.22)", "blur(0px) brightness(1)"],
-          },
-    exit: (travel: number) =>
-      reduce
-        ? { opacity: 0 }
-        : {
-            opacity: 0,
-            scale: 0.84,
-            x: travel * -205,
-            y: -42,
-            rotateZ: travel * -17,
-            rotateY: travel * -62,
-            filter: "blur(4px) brightness(1.2)",
-          },
+    initial: { opacity: 0, scale: reduce ? 1 : 0.985 },
+    animate: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: reduce ? 1 : 0.985 },
   };
 
   return (
     <div className="flex w-full max-w-5xl flex-col items-center gap-4">
       <div
         data-testid="memory-scrapbook-stage"
-        className="relative grid aspect-[4/5] w-full max-w-2xl place-items-center overflow-hidden bg-gradient-to-br from-[#171020] via-[#211a18] to-[#0c1023]"
+        className="relative grid aspect-[4/5] w-full max-w-2xl place-items-center overflow-visible bg-transparent"
         style={{ perspective: 1400 }}
       >
-        <AnimatePresence initial={false} custom={direction}>
-          {item.kind === "image" && item.id !== PLACEHOLDER_ITEM.id && (
-            <motion.div
-              key={`backdrop-${item.id}`}
-              custom={direction}
-              initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 1.2, x: direction * 70 }}
-              animate={{ opacity: 0.32, scale: 1.1, x: 0 }}
-              exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 1.28, x: direction * -80 }}
-              transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S * 1.4, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute inset-0"
-              aria-hidden="true"
-            >
-              <Image
-                src={getMediaUrl(item.id)}
-                alt=""
-                fill
-                sizes="(max-width: 768px) 100vw, 80vw"
-                className="scale-110 object-cover blur-2xl"
-                unoptimized
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(246,215,160,0.18),transparent_65%),linear-gradient(135deg,rgba(21,17,19,0.08),rgba(21,17,19,0.68))]" />
-
         {list.length > 1 && (
           <AnimatePresence initial={false} custom={direction}>
             {[-1, 1].map((offset) => {
@@ -485,8 +445,8 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
         )}
 
         {/*
-          The selected photograph fills the scrapbook page. Smaller prints peek
-          from behind it; there is no second card frame around the full photo.
+          The selected print keeps its paper frame. The large outer backplate
+          is intentionally absent so the scrapbook sits directly in the scene.
         */}
         <div className="z-20 grid h-full w-full place-items-center">
           <AnimatePresence initial={false} custom={direction}>
@@ -497,9 +457,9 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
               initial="initial"
               animate="animate"
               exit="exit"
-              transition={{ duration: reduce ? 0 : 1.15, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: reduce ? 0 : GALLERY_TRANSITION_S, ease: "easeInOut" }}
               data-testid="memory-scrapbook-photo"
-              className="relative col-start-1 row-start-1 h-full w-[76%] max-w-none"
+              className="relative col-start-1 row-start-1 aspect-[4/5] w-[76%] max-w-none border-[8px] border-[#f2eadb] bg-[#f2eadb] p-1.5 shadow-[0_28px_75px_-22px_rgba(0,0,0,0.9)] sm:border-[12px] sm:p-2"
               style={{ transformPerspective: 1400, transformStyle: "preserve-3d" }}
             >
               <GalleryFrame
@@ -507,7 +467,10 @@ function Gallery({ items, getMediaUrl }: { items: GalleryItem[]; getMediaUrl: (i
                 getMediaUrl={getMediaUrl}
                 imageFit="contain"
                 unframed
-                className="aspect-[4/5] w-full bg-[#17130f] shadow-[0_20px_60px_-22px_rgba(0,0,0,0.9)]"
+                kenBurns={item.kind === "image" && !reduce}
+                motionIndex={photoMotionIndex(item.id)}
+                zoomRange={0.04 + (photoMotionIndex(item.id) % 6) * 0.008}
+                className="aspect-[4/5] w-full bg-[#17130f]"
                 footer={
                   <figcaption className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 pb-4 pt-12 text-left sm:px-5">
                     <p className="font-script text-lg text-[#fff3d9] sm:text-2xl">{itemCaption(item)}</p>

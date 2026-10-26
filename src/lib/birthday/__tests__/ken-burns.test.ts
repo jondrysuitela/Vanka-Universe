@@ -18,6 +18,16 @@ describe("kenBurnsMotion", () => {
     expect(scale[1]).toBeGreaterThan(scale[0]);
   });
 
+  it("supports stable per-photo zoom ranges", () => {
+    const subtle = kenBurnsMotion(12, 0.04).scale;
+    const bold = kenBurnsMotion(12, 0.08).scale;
+
+    expect(subtle[0]).toBe(subtle[2]);
+    expect(bold[0]).toBe(bold[2]);
+    expect(subtle[1]).toBe(1.04);
+    expect(bold[1]).toBe(1.08);
+  });
+
   it("keeps the zoom subtle (at most 8%)", () => {
     const { scale } = kenBurnsMotion(3);
     expect(KEN_BURNS_SCALE_RANGE).toBeLessThanOrEqual(0.1);
@@ -62,8 +72,8 @@ describe("kenBurnsMotion", () => {
 });
 
 describe("crossfade helpers", () => {
-  it("has a crossfade long enough to overlap the two photos", () => {
-    expect(GALLERY_TRANSITION_S).toBeGreaterThanOrEqual(0.6);
+  it("uses a 1500ms crossfade for each scrapbook photo", () => {
+    expect(GALLERY_TRANSITION_S).toBe(1.5);
   });
 
   it("detects the same item, so no crossfade runs for an unchanged photo", () => {
